@@ -58,11 +58,11 @@ explodeByCol <- function(df, cols, sep=',', regex = NULL,
   # data frames fairly often come in with 'character' columns which are factors,
   # and these string-based functions can't handle that, so convert with a
   # warning
-
+  
   # instantiate a list to contain the exploded output
   exploded <- list()
   n.exploded <- list()
-
+  
   for(col in cols) {
     if(is.factor(df[, col])) {
       warning(
@@ -81,26 +81,26 @@ explodeByCol <- function(df, cols, sep=',', regex = NULL,
     # if regex is NULL, use the separator provided
     if(is.null(regex)) {
       exploded[col] <- list(strsplit(df[, col], sep, fixed = fixed))
-    # otherwise, use a regular expression to split the column
+      # otherwise, use a regular expression to split the column
     } else {
       exploded[col] <- list(regmatches(df[, col], gregexpr(regex, df[, col])))
     }
     # how many of each row should I create? ie 1,1,2,1,0
     n.exploded[[col]] <- sapply(exploded[[col]], length)
   }
-
+  
   # check the n.exploded values are the same for all columns
   if(!allSame(n.exploded)) {
     stop(
       paste0('The columns provided have inconsistent numbers of elements ',
-        'after exploding.'
-        )
+             'after exploding.'
       )
+    )
   }
   # turn the first element of n.exploded into a list of data frame row indices,
   # ie 1,2,3,3,4
   n.exploded.rows <- rep(1:length(n.exploded[[cols[1]]]), n.exploded[[cols[1]]])
-
+  
   # take the data frame and repeat rows the relevant number of times
   df <- df[n.exploded.rows, ]
   # fill its exploded column(s) with the appropriate values
@@ -137,7 +137,7 @@ pastePlus <- function(..., sep=" ", collapse = NULL, recycleZeroLength = TRUE) {
   #      If any of the passed objects has zero length, NULL; otherwise, the
   #      result of the paste function.
   if(!recycleZeroLength &
-       any(lapply(list(...), length) == 0)) {
+     any(lapply(list(...), length) == 0)) {
     return(NULL);
   }
   paste(..., sep = sep, collapse = collapse)
@@ -412,7 +412,7 @@ justFilename <- function(x) {
   sapply(strsplit(basename(x),"\\."),
          function(x) paste(x[1:(length(x)-1)],
                            collapse=".")
-         )
+  )
 }
 
 fileExt <- function(x) {
@@ -428,7 +428,7 @@ fileExt <- function(x) {
   # split the strings by full stops, and only take the final element
   extensions <- sapply(strsplit(basename(x),"\\."),
                        function(x) tail(x, 1)
-                      )
+  )
   # where the extension is the same as the input filename, there is no extension
   extensions[extensions == x] <- ''
   
@@ -502,15 +502,15 @@ trirt <- function(x) {
 # Create a quantity by passing values or vectors to unum(x, dx), and then add,
 # subtract, multiply or divide with the functions below.
 unum <- function(x, dx) { data.frame(x=x, dx=dx) }
-  # Calculates the triangular root of a number.
-  #
-  # Args:
-  #       x: A number or vector of numbers.
-  #      dx: A number or vector of numbers representing the uncertainty on x.
-  #
-  # Returns:
-  #   A data frame with columns x and dx which can be used for further
-  #   operations.
+# Calculates the triangular root of a number.
+#
+# Args:
+#       x: A number or vector of numbers.
+#      dx: A number or vector of numbers representing the uncertainty on x.
+#
+# Returns:
+#   A data frame with columns x and dx which can be used for further
+#   operations.
 uadd <- function(a, b) {
   z <- a$x + b$x
   dz <- sqrt(a$dx^2 + b$dx^2)
@@ -552,22 +552,22 @@ normalise <- function(x, FUN = sum) {
 ################################################################################
 
 stdErr <- function(x) { sqrt(var(x)/length(x)) }
-  # For a vector x, returns the standard error on the mean.
-  #
-  # Args:
-  #      x: A vector.
-  #
-  # Returns:
-  #      The standard error on the mean.
+# For a vector x, returns the standard error on the mean.
+#
+# Args:
+#      x: A vector.
+#
+# Returns:
+#      The standard error on the mean.
 
 cv <- function(x) { sd(x)/mean(x) }
-  # For a vector x, returns the coefficient of variation.
-  #
-  # Args:
-  #      x: A vector.
-  #
-  # Returns:
-  #      The coefficient of variation.
+# For a vector x, returns the coefficient of variation.
+#
+# Args:
+#      x: A vector.
+#
+# Returns:
+#      The coefficient of variation.
 
 covar <- function(x) {
   # Wrapper function which returns the variance for a single-column vector and
@@ -657,78 +657,79 @@ firstElement <- function(x) {
 }
 
 permute <-
-function(
-  # Randomly permute (some) elements of a vector or character string to create a
-  # (slightly) randomised version of it.
-  #
-  # Args:
-          x,
-  #       A vector or character string to have its contents permuted.
-          frac = 1.0,
-  #       The fraction of the contents to be permuted, from 0 (no permutation)
-  #       to 1 (permute everything).
-          n.permute = NA
-  #       The number of items to permute. Defaults to being calculated from frac
-  #       but can be specified manually too. Must be a multiple of 2, because
-  #       elements are swapped in pairs.
-  #
-  # Returns:
-  #       The vector or string with n.permute of its elements permuted.
-) {
-  # if frac is not a fraction, throw an error
-  if(frac < 0.0 | frac > 1.0) {
-    stop(paste0('frac = ', frac,'; it must be between 0 and 1.'))
-  } else if(!is.na(n.permute) & n.permute %% 2 != 0) {
-    stop(paste0('n.permute = ', n.permute,'; it must be divisible by 2.'))
+  function(
+    # Randomly permute (some) elements of a vector or character string to create a
+    # (slightly) randomised version of it.
+    #
+    # Args:
+    x,
+    #       A vector or character string to have its contents permuted.
+    frac = 1.0,
+    #       The fraction of the contents to be permuted, from 0 (no permutation)
+    #       to 1 (permute everything).
+    n.permute = NA
+    #       The number of items to permute. Defaults to being calculated from frac
+    #       but can be specified manually too. Must be a multiple of 2, because
+    #       elements are swapped in pairs.
+    #
+    # Returns:
+    #       The vector or string with n.permute of its elements permuted.
+  ) {
+    # if frac is not a fraction, throw an error
+    if(frac < 0.0 | frac > 1.0) {
+      stop(paste0('frac = ', frac,'; it must be between 0 and 1.'))
+    } else if(!is.na(n.permute) & n.permute %% 2 != 0) {
+      stop(paste0('n.permute = ', n.permute,'; it must be divisible by 2.'))
+    }
+    
+    # if x is a character string, make it into a vector for processing and set a
+    # reminder to put it back as a string before returning
+    if(class(x) == 'character') {
+      x.is.string <- TRUE
+      x <- strsplit(x, '')[[1]]
+    } else {
+      x.is.string <- FALSE
+    }
+    
+    # if n.permute was not provided, we can now calculate it
+    if(is.na(n.permute)) {
+      n.permute <- round(length(x)*frac / 2) * 2 # make sure it's a multiple of 2!
+    }
+    
+    # if n.permute is longer than the vector...
+    if(n.permute > length(x)) {
+      stop(paste0('n.permute = ', n.permute,', which is greater than the length ',
+                  'of the string or vector provided, ', length(x)))
+    }
+    
+    # Create a random sample for pairs of positions to swap between
+    swapsies <- sample(1:length(x), n.permute)
+    
+    # take those swapping positions and move them around; reversing the indices in
+    # the second part of the function implies that position 1 will swap with
+    # position n, 2 with n-1, etc...
+    x <- replace(x, swapsies, x[rev(swapsies)])
+    
+    # if it was a string then reassemble it before returning
+    if(x.is.string) {
+      x <- paste(x, collapse='')
+    }
+    
+    x
   }
-      
-  # if x is a character string, make it into a vector for processing and set a
-  # reminder to put it back as a string before returning
-  if(class(x) == 'character') {
-    x.is.string <- TRUE
-    x <- strsplit(x, '')[[1]]
-  } else {
-    x.is.string <- FALSE
-  }
-  
-  # if n.permute was not provided, we can now calculate it
-  if(is.na(n.permute)) {
-    n.permute <- round(length(x)*frac / 2) * 2 # make sure it's a multiple of 2!
-  }
-  
-  # if n.permute is longer than the vector...
-  if(n.permute > length(x)) {
-    stop(paste0('n.permute = ', n.permute,', which is greater than the length ',
-                'of the string or vector provided, ', length(x)))
-  }
-  
-  # Create a random sample for pairs of positions to swap between
-  swapsies <- sample(1:length(x), n.permute)
-  
-  # take those swapping positions and move them around; reversing the indices in
-  # the second part of the function implies that position 1 will swap with
-  # position n, 2 with n-1, etc...
-  x <- replace(x, swapsies, x[rev(swapsies)])
-  
-  # if it was a string then reassemble it before returning
-  if(x.is.string) {
-    x <- paste(x, collapse='')
-  }
-  
-  x
-}
 
-requirePlus <- function(..., install = TRUE) {
+requirePlus <- function(..., install = TRUE, quietly = TRUE) {
   # Simply require a number of packages in the same command, and install them if
   # not present.
   #
   # Args:
   #   packages: A vector of the names of the packages to be imported.
   #    install: Logical indicating whether missing packages should be installed.
+  #    quietly: As with require, quietly suppresses messages.
   #
   # Returns:
   #   Nothing (though warning and error messages are displayed on failure)
-
+  
   package.list <- c(...)
   # if the install parameter is true, install missing packages
   if(install) {
@@ -746,13 +747,17 @@ requirePlus <- function(..., install = TRUE) {
   # loop over packages, importing them
   require.success <- unlist(
     # suppress warnings, because we'll tell the user which packages failed later
-    suppressWarnings(lapply(package.list, require, character.only = TRUE))
-  )
-  message(
-    paste('Successfully imported packages',
-          paste(package.list[require.success], collapse = ', ')
+    suppressWarnings(
+      lapply(package.list, require, character.only = TRUE, quietly = quietly)
     )
   )
+  if(sum(require.success) > 0) {
+    message(
+      paste('Successfully imported packages',
+            paste(package.list[require.success], collapse = ', ')
+      )
+    )
+  }
   if(sum(!require.success) > 0) {
     warning(
       paste('Failed to import packages',
@@ -802,8 +807,8 @@ inRange <- function(x, rang, incl.end = rep(FALSE, length(rang))) {
   # find those which are bigger than the minimum value (including endpoint if
   # specified)...
   if(incl.end[i.min]){x >= rang[i.min]}else{x > rang[i.min]} &
-  # ...and those smaller than the max...
-  if(incl.end[i.max]){x <= rang[i.max]}else{x < rang[i.max]}
+    # ...and those smaller than the max...
+    if(incl.end[i.max]){x <= rang[i.max]}else{x < rang[i.max]}
   # ...and return it!
 }
 
@@ -827,7 +832,7 @@ logfileStart <- function(filename = default.logfile.name) {
 logfileCat <- function(...,
                        newline = TRUE, sep = "", fill = FALSE,
                        filename = logfileName
-                       ) {
+) {
   # Wrapper for adding an entry to a log file.
   #
   # Args:
@@ -918,10 +923,43 @@ getUserInputInteger <- function(s) {
   #   An integer.
   getUserInput(s,
                parse.fun = function(x){
-                  suppressWarnings(as.integer(x))
-                 },
+                 suppressWarnings(as.integer(x))
+               },
                validate.fun = function(x) {
-                  ifelse(!is.na(x), TRUE, FALSE)
-                 },
+                 ifelse(!is.na(x), TRUE, FALSE)
+               },
                e = 'Could not parse input as an integer.')
+}
+
+
+
+handyTimer <- function(t = NA, numeric = TRUE) {
+  # Wrapper function for easy to read timing code.
+  #
+  # Args:
+  #   t: The time. Pass nothing (or NA) and the function will return the current
+  #      time, ie start the clock. Pass a numeric or time object (ie a
+  #      previously stored start time), and the function returns the difference
+  #      (ie a time you wanted to measure).
+  #   numeric: Whether to convert your time into a simple numerical value. FALSE
+  #      results in returning an R time or time difference object.
+  #
+  # Returns:
+  #   Either the current time, or the time since t.
+  
+  # If t is NA, get current time
+  if(is.na(t)) {
+    t <- proc.time()['elapsed']
+    # Otherwise, get time difference
+  } else {
+    t <- proc.time()['elapsed'] - t
+  }
+  
+  # If the user wanted a numerical answer, as.numeric it
+  if(numeric) {
+    t <- as.numeric(t)
+  }
+  
+  # Return t
+  t
 }
