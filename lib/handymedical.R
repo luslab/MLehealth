@@ -52,8 +52,8 @@ binByQuantile <- function(x, probs, duplicate.discard = TRUE) {
     breaks <- unique(breaks)
   } else if (sum(duplicated(breaks))) {
     stop(
-      paste0('Non-unique breaks and discarding of duplicates has been disabled. ',
-      'Please choose different quantiles to split at.')
+      'Non-unique breaks and discarding of duplicates has been disabled. ',
+      'Please choose different quantiles to split at.'
     )
   }
   factorNAfix(
@@ -77,6 +77,89 @@ binByAbs <- function(x, breaks) {
     ),
     NAval = 'missing'
   )
+}
+
+prepData <- function(
+  # surv.event cannot be 'surv_event' or will break later!
+  # The fraction of the data to use as the test set (1 - this will be used as
+  # the training set)
+  # Default quantile boundaries for discretisation
+  df, predictors, process.settings, col.time, col.event, event.yes = NA,
+  default.quantiles = c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1),
+  extra.fun = NULL, random.seed = NA, NAval = 'missing', n.keep = NA
+) {
+  # If a random seed was provided, set it
+  if(!is.na(random.seed)) set.seed(random.seed)
+  
+  # If we only want n.keep of the data, might as well throw it out now to make
+  # all the steps from here on faster...
+  if(!is.na(n.keep)) {
+    # Keep rows at random to avoid bias
+    df <- sample.df(df, n.keep)
+  }
+  
+  # Add event column to predictors to create full column list
+  columns <- c(predictors, col.time, col.event)
+  
+  # Only include the columns we actually need, and don't include any which
+  # aren't in the data frame because it's possible that some predictors may be
+  # calculated later, eg during extra.fun
+  df <- df[, columns[columns %in% names(df)]]
+  
+  # Go through per predictor and process them
+  for(col.name in predictors[predictors %in% names(df)]){
+    cat(col.name, typeof(df[,col.name]))
+    # If we have a specific way to process this column, let's do it!
+    if(col.name %in% process.settings$var) {
+      j <- match(col.name, process.settings$var)
+      
+      # Processing method being NA means leave it alone...
+      if(!is.na(process.settings$method[j])) {
+        # ...so, if not NA, use the function provided
+        process.fun <- match.fun(process.settings$method[j])
+        
+        df[, discretise.settings$output.var[j]] <-
+          process.fun(
+            df[,col.name],
+            process.settings$settings[[j]]
+          )
+      }
+    # Otherwise, no specific processing specified, so perform defaults
+    } else {
+      # If it's a character column, make it a factor
+      if(is.character(df[, col.name])) {
+        message('Column ', col.name, ' was coerced from character to factor.')
+        df[, col.name] <- factor(df[, col.name])
+      }
+      # Then, if there are any NAs, go through and make them a level of their own
+      if(is.factor(df[, col.name]) & anyNA(df[, col.name])){
+        df[, col.name] <-
+          factorNAfix(col, NAval = NAval)
+      }
+      # If it's numerical, then it needs discretising
+      if(class(df[,col.name]) %in% c('numeric', 'integer')) {
+          df[,col.name] <-
+              binByQuantile(df[,col.name], default.quantiles)
+      # Finally, if it's logical, turn it into a two-level factor
+      } else if(class(df[,col.name]) == 'logical') {
+        df[,col.name] <- factor(df[,col.name])
+      }
+    }
+  }
+  
+  # Create a column denoting censorship or otherwise of events
+  df$surv_event <- df[, col.event] == event.yes
+  
+  # Remove the event column so we don't use it as a covariate later
+  df <- df[, names(df) != col.event]
+  
+  # If there's any more preprocessing to do, do it now!
+  if(!is.null(extra.fun)) {
+    df <- extra.fun(df)
+  }
+  
+  # Return prepped data
+  df
 }
 
 plotConfusionMatrix <- function(truth, prediction, title = NA) {
@@ -131,4 +214,13 @@ getTopStates <- function(df, n = 10) {
       n
     )
   factor(all.states, levels=names(top.states))
+}
+
+cvFolds <- function(n.data, n.folds = 3) {
+  # Return a list of n.folds vectors containing the numbers 1:n.data, scrambled
+  # randomly.
+  split(
+    sample(1:n.data),
+    ceiling((1:n.data)/(n.data/n.folds))
+  )
 }
