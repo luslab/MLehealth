@@ -85,7 +85,7 @@ for(i in 1:n.calibrations) {
     )
 
   # Save output at each step
-  write.csv(calibrations, 'output/rf-ntrees.csv')
+  write.csv(calibrations, '../output/rf-ntrees.csv')
   # Explicitly delete the forest just created, to be on the safe side
   rm(fit.rf)
 }

@@ -5,7 +5,7 @@
 set.seed(35498)
 
 # Specify the data file containing the patient cohort
-cohort.file <- '../../../data/cohort-sanitised.csv'
+cohort.file <- '../../data/cohort-sanitised.csv'
 
 # The fraction of the data to use as the test set (1 - this will be used as the
 # training set)
