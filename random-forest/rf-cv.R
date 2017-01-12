@@ -3,16 +3,15 @@
 #' Random forests don't really have any tunable parameters beyond the choice of 
 #' splitting criterion. However, our random forests do: because we're looking
 
-filename <- '../../data/cohort-sample.csv'
+filename <- '../../data/cohort-sanitised.csv'
 
 # OK, first let's try constant numbers of bins for all variables, and also vary
 # tod.rounding. Then, do some proper randomness based on the results..?
 input.n.bins <- 2:10
 tod.round.vals <- c(1, 0.5, 0.2, 0.1, 0.05, 0.01)
 cv.n.folds <- 3
-n.trees <- 50
-
-n.data <- 1000
+n.trees <- 500
+n.data <- 30000
 
 risk.time <- 5
 
@@ -45,7 +44,16 @@ test.set <- sample(1:nrow(COHORT.prep), (1/3)*nrow(COHORT.prep))
 var.combinations <-
   expand.grid(1:length(input.n.bins), 1:length(tod.round.vals))
 
+# Create an empty data frame to aggregate stats per fold
+cv.performance.rf <- data.frame()
+
 for(i in 1:nrow(var.combinations)) {
+  cat(
+    'Trying', input.n.bins[var.combinations[i, 1]], 'bins for discretisation',
+    'and rounding death times to', tod.round.vals[var.combinations[i, 2]],
+    'years\n'
+  )
+  
   # prep the data given the variables provided
   COHORT.cv <-
     prepData(
@@ -69,14 +77,11 @@ for(i in 1:nrow(var.combinations)) {
   COHORT.cv$time_death_round <-
     round_any(
       COHORT.cv$time_death,
-      tod.round.vals[input.n.bins[var.combinations[i, 2]]]
+      tod.round.vals[var.combinations[i, 2]]
     )
   
   # Get folds for cross-validation
   cv.folds <- cvFolds(nrow(COHORT.cv), cv.n.folds)
-  
-  # Create an empty data frame to aggregate stats per fold
-  cv.performance.rf <- data.frame()
   
   for(j in 1:cv.n.folds) {
     # Fit the random forest to the training set
@@ -127,7 +132,7 @@ for(i in 1:nrow(var.combinations)) {
         cv.performance.rf,
         data.frame(
           discretise.bins = input.n.bins[var.combinations[i, 1]],
-          tod.round =  input.n.bins[var.combinations[i, 2]],
+          tod.round =  tod.round.vals[var.combinations[i, 2]],
           cv.fold = j,
           c.index = c.index.rf,
           time.learn = time.learn.rf,
