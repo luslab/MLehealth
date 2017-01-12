@@ -222,3 +222,19 @@ cvFolds <- function(n.data, n.folds = 3) {
     ceiling((1:n.data)/(n.data/n.folds))
   )
 }
+
+calcRFCIndex <- function(model.fit, df, risk.time) {
+  # Calculate the C-index for model.fit based on data in df, using the value of
+  # the predicted survival curve at risk.time as a predictor
+  predictions <- predict(model.fit, df)
+  risk.bin <- which.min(abs(predictions$unique.death.times - risk.time))
+  # Get the chance of having died (ie 1 - survival) for all patients at that time (ie in that bin)
+  rf.risk.proxy <- 1 - predictions$survival[, risk.bin]
+  # Return C-index
+  as.numeric(
+    survConcordance(
+      Surv(time_death, surv_event) ~ rf.risk.proxy,
+      df
+    )$concordance
+  )
+}

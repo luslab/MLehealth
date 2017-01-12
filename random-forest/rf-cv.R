@@ -104,23 +104,7 @@ for(i in 1:nrow(var.combinations)) {
     
     # Predict the held-out validation set
     time.start <- handyTimer()
-    predict.rf <- 
-      predict(
-        fit.rf,
-        COHORT.cv[cv.folds[[j]],], # Validation set
-        num.threads=8
-      )
-    risk.bin <- which.min(abs(predict.rf$unique.death.times - risk.time))
-    # Get the chance of having died (ie 1 - survival) for all patients at that time (ie in that bin)
-    rf.risk.proxy <- 1 - predict.rf$survival[, risk.bin]
-    # Append C-index
-    c.index.rf <-
-      as.numeric(
-        survConcordance(
-          Surv(time_death, surv_event) ~ rf.risk.proxy,
-          COHORT.cv[cv.folds[[j]],]
-        )$concordance
-      )
+    c.index.rf <- calcRFCIndex(fit.rf, COHORT.cv[cv.folds[[j]],], risk.time)
     time.predict.rf <- handyTimer(time.start)
     
     # Clear up and explicitly delete the forest just created, to be on the safe side
