@@ -87,13 +87,13 @@ for(i in 1:nrow(var.combinations)) {
     # Fit the random forest to the training set
     time.start <- handyTimer()
     COHORT.surv <- Surv(
-      time  = COHORT.cv[cv.folds[[j]], 'time_death_round'],
-      event = COHORT.cv[cv.folds[[j]], 'surv_event']
+      time  = COHORT.cv[-cv.folds[[j]], 'time_death_round'],
+      event = COHORT.cv[-cv.folds[[j]], 'surv_event']
     )
     fit.rf <-
       ranger(
         surv.formula,
-        COHORT.cv[cv.folds[[j]],], # Training set
+        COHORT.cv[-cv.folds[[j]],], # Training set
         num.trees = n.trees,
         splitrule = 'logrank',
         num.threads = 8
@@ -142,7 +142,7 @@ for(i in 1:nrow(var.combinations)) {
       )
     
     # Save output at each step
-    write.csv(cv.performance.rf, '../../output/rf-crossvalidation-try1.csv')
+    write.csv(cv.performance.rf, '../../output/rf-crossvalidation-try2.csv')
     
     # Fit the Cox model to the training set
     
