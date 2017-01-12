@@ -108,7 +108,6 @@ prepData <- function(
   
   # Go through per predictor and process them
   for(col.name in predictors[predictors %in% names(df)]){
-    cat(col.name, typeof(df[,col.name]))
     # If we have a specific way to process this column, let's do it!
     if(col.name %in% process.settings$var) {
       j <- match(col.name, process.settings$var)
@@ -128,13 +127,12 @@ prepData <- function(
     } else {
       # If it's a character column, make it a factor
       if(is.character(df[, col.name])) {
-        message('Column ', col.name, ' was coerced from character to factor.')
         df[, col.name] <- factor(df[, col.name])
       }
       # Then, if there are any NAs, go through and make them a level of their own
       if(is.factor(df[, col.name]) & anyNA(df[, col.name])){
         df[, col.name] <-
-          factorNAfix(col, NAval = NAval)
+          factorNAfix(df[, col.name], NAval = NAval)
       }
       # If it's numerical, then it needs discretising
       if(class(df[,col.name]) %in% c('numeric', 'integer')) {
