@@ -11,7 +11,7 @@ input.n.bins <- 2:10
 tod.round.vals <- c(1, 0.5, 0.2, 0.1, 0.05, 0.01)
 cv.n.folds <- 3
 n.trees <- 500
-n.data <- 30000
+n.data <- 10000
 
 risk.time <- 5
 
@@ -84,12 +84,13 @@ for(i in 1:nrow(var.combinations)) {
   cv.folds <- cvFolds(nrow(COHORT.cv), cv.n.folds)
   
   for(j in 1:cv.n.folds) {
-    # Fit the random forest to the training set
     time.start <- handyTimer()
+    # Create survival object for training set
     COHORT.surv <- Surv(
       time  = COHORT.cv[-cv.folds[[j]], 'time_death_round'],
       event = COHORT.cv[-cv.folds[[j]], 'surv_event']
     )
+    # Fit the random forest to the training set
     fit.rf <-
       ranger(
         surv.formula,
@@ -102,13 +103,27 @@ for(i in 1:nrow(var.combinations)) {
     
     memory.used.rf <- as.numeric(object.size(fit.rf))
     
-    # Predict the held-out validation set
+    # Time making the predictions
     time.start <- handyTimer()
-    c.index.rf <- calcRFCIndex(fit.rf, COHORT.cv[cv.folds[[j]],], risk.time)
+    # Predict the training set
+    c.index.rf.train <- calcRFCIndex(fit.rf, COHORT.cv[-cv.folds[[j]],], risk.time)
+    # Predict the held-out validation set
+    c.index.rf.val <- calcRFCIndex(fit.rf, COHORT.cv[cv.folds[[j]],], risk.time)
     time.predict.rf <- handyTimer(time.start)
     
     # Clear up and explicitly delete the forest just created, to be on the safe side
     rm(fit.rf)
+    
+    time.start <- handyTimer()
+    # Fit the Cox model to the training set
+    fit.cph <- cph(surv.formula, COHORT.cv[-cv.folds[[j]],], surv = TRUE)
+    time.learn.cph <- handyTimer(time.start)
+    
+    time.start <- handyTimer()
+    # Get C-indices for training and validation sets
+    c.index.cph.train <- calcCoxCIndex(fit.cph, COHORT.cv[-cv.folds[[j]],])
+    c.index.cph.val <- calcCoxCIndex(fit.cph, COHORT.cv[cv.folds[[j]],])
+    time.predict.cph <- handyTimer(time.start)
     
     # Append the stats we've obtained from this fold
     cv.performance.rf <-
@@ -118,19 +133,20 @@ for(i in 1:nrow(var.combinations)) {
           discretise.bins = input.n.bins[var.combinations[i, 1]],
           tod.round =  tod.round.vals[var.combinations[i, 2]],
           cv.fold = j,
-          c.index = c.index.rf,
-          time.learn = time.learn.rf,
-          time.predict = time.predict.rf,
-          memory.used = memory.used.rf
+          c.index.rf.train,
+          c.index.rf.val,
+          time.learn.rf,
+          time.predict.rf,
+          memory.used.rf,
+          c.index.cph.train,
+          c.index.cph.val,
+          time.learn.cph,
+          time.predict.cph
         )
       )
     
     # Save output at each step
     write.csv(cv.performance.rf, '../../output/rf-crossvalidation-try2.csv')
-    
-    # Fit the Cox model to the training set
-    
-    # Predict the Cox model based on the validation set
   }
   
 }
