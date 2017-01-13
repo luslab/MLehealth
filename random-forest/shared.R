@@ -30,6 +30,9 @@ surv.predict <- c(
   'most_deprived'
 )
 
+exclude.vars <- c('hx_mi')
+surv.predict <- surv.predict[!(surv.predict %in% exclude.vars)]
+
 # Name of column giving time for use in survival object
 surv.time    <- 'time_death'
 # Name of event column for survival object
