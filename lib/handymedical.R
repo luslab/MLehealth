@@ -238,3 +238,14 @@ calcRFCIndex <- function(model.fit, df, risk.time) {
     )$concordance
   )
 }
+
+calcCoxCIndex <- function(model.fit, df) {
+  # Calculate the C-index for a Cox proportional hazards model on data in df
+  predictions <- predict(model.fit, df)
+  as.numeric(
+    survConcordance(
+      Surv(time_death, surv_event) ~ predictions,
+      df
+    )$concordance
+  )
+}
