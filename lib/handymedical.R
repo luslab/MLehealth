@@ -111,15 +111,15 @@ prepData <- function(
     # If we have a specific way to process this column, let's do it!
     if(col.name %in% process.settings$var) {
       j <- match(col.name, process.settings$var)
-      
+
       # Processing method being NA means leave it alone...
       if(!is.na(process.settings$method[j])) {
         # ...so, if not NA, use the function provided
         process.fun <- match.fun(process.settings$method[j])
         
-        df[, discretise.settings$output.var[j]] <-
+        df[, col.name] <-
           process.fun(
-            df[,col.name],
+            df[, col.name],
             process.settings$settings[[j]]
           )
       }
@@ -141,6 +141,10 @@ prepData <- function(
       # Finally, if it's logical, turn it into a two-level factor
       } else if(class(df[,col.name]) == 'logical') {
         df[,col.name] <- factor(df[,col.name])
+        # If there are missing values, fix them
+        if(anyNA(df[, col.name])) {
+          factorNAfix(df[, col.name], NAval = NAval)
+        }
       }
     }
   }
