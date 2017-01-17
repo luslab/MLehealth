@@ -1,15 +1,13 @@
-#' # Cross-validating discretisation of input variables
+#' # Cross-validating discretisation of input variables in a Cox model
 #' 
-#' Random forests don't really have any tunable parameters beyond the choice of 
-#' splitting criterion. However, our random forests do: because we're looking
+#' 
 
 filename <- '../../data/cohort-sanitised.csv'
 
-# OK, first let's try constant numbers of bins for all variables, and also vary
-# tod.rounding. Then, do some proper randomness based on the results..?
 input.n.bins <- 2:20
-n.calibrations <- 10
-n.data <- 10000
+cv.n.folds <- 3
+n.calibrations <- 100
+n.data <- 30000
 
 continuous.vars <-
   c(
@@ -43,11 +41,11 @@ COHORT.prep <-
 test.set <- sample(1:nrow(COHORT.prep), (1/3)*nrow(COHORT.prep))
 
 # Create an empty data frame to aggregate stats per fold
-cv.performance.rf <- data.frame()
+cv.performance <- data.frame()
 
 for(i in 1:n.calibrations) {
   cat(
-    'Calibration', i
+    'Calibration', i, '...\n'
   )
   
   # Reset process settings with the base setings
@@ -59,18 +57,23 @@ for(i in 1:n.calibrations) {
     )
   # Generate some random numbers of bins (and for n bins, you need n + 1 breaks)
   n.bins <- sample(input.n.bins, length(continuous.vars), replace = TRUE) + 1
+  names(n.bins) <- continuous.vars
   # Go through each variable setting it to bin by quantile with a random number of bins
-  for(j in length(continuous.vars)) {
+  for(j in 1:length(continuous.vars)) {
     process.settings$var <- c(process.settings$var, continuous.vars[j])
     process.settings$method <- c(process.settings$method, 'binByQuantile')
-    process.settings$settings <- c(process.settings$settings,
-      seq(
-        # Quantiles are obviously between 0 and 1
-        0, 1,
-        # Choose a random number of bins (and for n bins, you need n + 1 breaks)
-        length.out = n.bins[j]
+    process.settings$settings <-
+      c(
+        process.settings$settings,
+        list(
+          seq(
+            # Quantiles are obviously between 0 and 1
+            0, 1,
+            # Choose a random number of bins (and for n bins, you need n + 1 breaks)
+            length.out = n.bins[j]
+          )
+        )
       )
-    )
   }
   
   # prep the data given the variables provided
@@ -87,7 +90,7 @@ for(i in 1:n.calibrations) {
   
   # Get folds for cross-validation
   cv.folds <- cvFolds(nrow(COHORT.cv), cv.n.folds)
-  
+
   for(j in 1:cv.n.folds) {
     time.start <- handyTimer()
     # Create survival object for training set
@@ -95,8 +98,6 @@ for(i in 1:n.calibrations) {
       time  = COHORT.cv[-cv.folds[[j]], 'time_death'],
       event = COHORT.cv[-cv.folds[[j]], 'surv_event']
     )
-    
-    time.start <- handyTimer()
     # Fit the Cox model to the training set
     fit.cph <- cph(surv.formula, COHORT.cv[-cv.folds[[j]],], surv = TRUE)
     time.learn.cph <- handyTimer(time.start)
@@ -108,17 +109,13 @@ for(i in 1:n.calibrations) {
     time.predict.cph <- handyTimer(time.start)
     
     # Append the stats we've obtained from this fold
-    cv.performance.rf <-
+    cv.performance <-
       rbind(
-        cv.performance.rf,
+        cv.performance,
         data.frame(
-          discretise.bins = input.n.bins[var.combinations[i, 1]],
+          calibration = i,
           cv.fold = j,
-          c.index.rf.train,
-          c.index.rf.val,
-          time.learn.rf,
-          time.predict.rf,
-          memory.used.rf,
+          as.list(n.bins),
           c.index.cph.train,
           c.index.cph.val,
           time.learn.cph,
@@ -127,7 +124,7 @@ for(i in 1:n.calibrations) {
       )
     
     # Save output at each step
-    write.csv(cv.performance.rf, '../../output/cph-crossvalidation-try1.csv')
+    write.csv(cv.performance, '../../output/cph-crossvalidation-try1.csv')
   }
   
 }
