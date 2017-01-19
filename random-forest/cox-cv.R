@@ -2,7 +2,9 @@
 #' 
 #' 
 
-filename <- '../../data/cohort-sanitised.csv'
+data.filename <- '../../data/cohort-sanitised.csv'
+calibration.filename <- '../../output/cph-crossvalidation-try1.csv'
+results.filename <- '../../output/cph-results-try1.csv'
 
 input.n.bins <- 2:20
 cv.n.folds <- 3
@@ -28,7 +30,7 @@ surv.formula <-
 
 # Load the data and convert to data frame to make column-selecting code in
 # prepData simpler
-COHORT.full <- data.frame(fread(filename))
+COHORT.full <- data.frame(fread(data.filename))
 
 # We need to do a quick null preparation of the data to get its length
 COHORT.prep <-
@@ -40,94 +42,197 @@ COHORT.prep <-
 
 test.set <- sample(1:nrow(COHORT.prep), (1/3)*nrow(COHORT.prep))
 
-# Create an empty data frame to aggregate stats per fold
-cv.performance <- data.frame()
-
-for(i in 1:n.calibrations) {
-  cat(
-    'Calibration', i, '...\n'
-  )
+# If we've not already done a calibration, then do one
+if(!file.exists(calibration.filename)) {
+  # Create an empty data frame to aggregate stats per fold
+  cv.performance <- data.frame()
   
-  # Reset process settings with the base setings
-  process.settings <-
-    list(
-      var        = c('anonpatid', 'time_death', 'imd_score', 'exclude'),
-      method     = c(NA, NA, NA, NA),
-      settings   = list(NA, NA, NA, NA)
+  for(i in 1:n.calibrations) {
+    cat(
+      'Calibration', i, '...\n'
     )
-  # Generate some random numbers of bins (and for n bins, you need n + 1 breaks)
-  n.bins <- sample(input.n.bins, length(continuous.vars), replace = TRUE) + 1
-  names(n.bins) <- continuous.vars
-  # Go through each variable setting it to bin by quantile with a random number of bins
-  for(j in 1:length(continuous.vars)) {
-    process.settings$var <- c(process.settings$var, continuous.vars[j])
-    process.settings$method <- c(process.settings$method, 'binByQuantile')
-    process.settings$settings <-
-      c(
-        process.settings$settings,
-        list(
-          seq(
-            # Quantiles are obviously between 0 and 1
-            0, 1,
-            # Choose a random number of bins (and for n bins, you need n + 1 breaks)
-            length.out = n.bins[j]
+    
+    # Reset process settings with the base setings
+    process.settings <-
+      list(
+        var        = c('anonpatid', 'time_death', 'imd_score', 'exclude'),
+        method     = c(NA, NA, NA, NA),
+        settings   = list(NA, NA, NA, NA)
+      )
+    # Generate some random numbers of bins (and for n bins, you need n + 1 breaks)
+    n.bins <- sample(input.n.bins, length(continuous.vars), replace = TRUE) + 1
+    names(n.bins) <- continuous.vars
+    # Go through each variable setting it to bin by quantile with a random number of bins
+    for(j in 1:length(continuous.vars)) {
+      process.settings$var <- c(process.settings$var, continuous.vars[j])
+      process.settings$method <- c(process.settings$method, 'binByQuantile')
+      process.settings$settings <-
+        c(
+          process.settings$settings,
+          list(
+            seq(
+              # Quantiles are obviously between 0 and 1
+              0, 1,
+              # Choose a random number of bins (and for n bins, you need n + 1 breaks)
+              length.out = n.bins[j]
+            )
           )
         )
+    }
+    
+    # prep the data given the variables provided
+    COHORT.cv <-
+      prepData(
+        # Data for cross-validation excludes test set
+        COHORT.full[-test.set, ],
+        cols.keep,
+        process.settings,
+        surv.time, surv.event,
+        surv.event.yes,
+        extra.fun = caliberExtraPrep
       )
-  }
-  
-  # prep the data given the variables provided
-  COHORT.cv <-
-    prepData(
-      # Data for cross-validation excludes test set
-      COHORT.full[-test.set, ],
-      cols.keep,
-      process.settings,
-      surv.time, surv.event,
-      surv.event.yes,
-      extra.fun = caliberExtraPrep
-    )
-  
-  # Get folds for cross-validation
-  cv.folds <- cvFolds(nrow(COHORT.cv), cv.n.folds)
-
-  for(j in 1:cv.n.folds) {
-    time.start <- handyTimer()
-    # Create survival object for training set
-    COHORT.surv <- Surv(
-      time  = COHORT.cv[-cv.folds[[j]], 'time_death'],
-      event = COHORT.cv[-cv.folds[[j]], 'surv_event']
-    )
-    # Fit the Cox model to the training set
-    fit.cph <- cph(surv.formula, COHORT.cv[-cv.folds[[j]],], surv = TRUE)
-    time.learn.cph <- handyTimer(time.start)
     
-    time.start <- handyTimer()
-    # Get C-indices for training and validation sets
-    c.index.cph.train <- calcCoxCIndex(fit.cph, COHORT.cv[-cv.folds[[j]],])
-    c.index.cph.val <- calcCoxCIndex(fit.cph, COHORT.cv[cv.folds[[j]],])
-    time.predict.cph <- handyTimer(time.start)
-    
-    # Append the stats we've obtained from this fold
-    cv.performance <-
-      rbind(
-        cv.performance,
-        data.frame(
-          calibration = i,
-          cv.fold = j,
-          as.list(n.bins),
-          c.index.cph.train,
-          c.index.cph.val,
-          time.learn.cph,
-          time.predict.cph
+    # Get folds for cross-validation
+    cv.folds <- cvFolds(nrow(COHORT.cv), cv.n.folds)
+  
+    for(j in 1:cv.n.folds) {
+      time.start <- handyTimer()
+      # Create survival object for training set
+      COHORT.surv <- Surv(
+        time  = COHORT.cv[-cv.folds[[j]], 'time_death'],
+        event = COHORT.cv[-cv.folds[[j]], 'surv_event']
+      )
+      # Fit the Cox model to the training set
+      fit.cph <- cph(surv.formula, COHORT.cv[-cv.folds[[j]],], surv = TRUE)
+      time.learn.cph <- handyTimer(time.start)
+      
+      time.start <- handyTimer()
+      # Get C-indices for training and validation sets
+      c.index.cph.train <- calcCoxCIndex(fit.cph, COHORT.cv[-cv.folds[[j]],])
+      c.index.cph.val <- calcCoxCIndex(fit.cph, COHORT.cv[cv.folds[[j]],])
+      time.predict.cph <- handyTimer(time.start)
+      
+      # Append the stats we've obtained from this fold
+      cv.performance <-
+        rbind(
+          cv.performance,
+          data.frame(
+            calibration = i,
+            cv.fold = j,
+            as.list(n.bins),
+            c.index.cph.train,
+            c.index.cph.val,
+            time.learn.cph,
+            time.predict.cph
+          )
         )
-      )
+      
+      # Save output at each step
+      write.csv(cv.performance, calibration.filename)
+      
+    } # End cross-validation loop (j)
     
-    # Save output at each step
-    write.csv(cv.performance, '../../output/cph-crossvalidation-try1.csv')
-  }
-  
+  } # End calibration loop (i)
+
+} else { # If we did previously calibrate, load it
+  cv.performance <- read.csv(calibration.filename)
 }
 
-# Finally, train the best obtained model on the full training set, and use it
-# to predict the held-back test set
+# Find the best calibration...
+# First, average performance across cross-validation folds
+cv.performance.average <-
+  aggregate(
+      c.index.cph.val ~ calibration,
+    data = cv.performance,
+    mean
+  )
+# Find the highest value
+best.calibration <-
+  cv.performance.average$calibration[
+    which.max(cv.performance.average$c.index.cph.val)
+  ]
+# And finally, find the first row of that calibration to get the n.bins values
+best.calibration.row1 <-
+  min(which(cv.performance$calibration == best.calibration))
+
+# Get its parameters
+n.bins <-
+  t(
+    cv.performance[best.calibration.row1, continuous.vars]
+  )
+
+# Prepare the data with those settings...
+
+# Reset process settings with the base setings
+process.settings <-
+  list(
+    var        = c('anonpatid', 'time_death', 'imd_score', 'exclude'),
+    method     = c(NA, NA, NA, NA),
+    settings   = list(NA, NA, NA, NA)
+  )
+for(j in 1:length(continuous.vars)) {
+  process.settings$var <- c(process.settings$var, continuous.vars[j])
+  process.settings$method <- c(process.settings$method, 'binByQuantile')
+  process.settings$settings <-
+    c(
+      process.settings$settings,
+      list(
+        seq(
+          # Quantiles are obviously between 0 and 1
+          0, 1,
+          # Choose a random number of bins (and for n bins, you need n + 1 breaks)
+          length.out = n.bins[j]
+        )
+      )
+    )
+}
+
+# prep the data given the variables provided
+COHORT.optimised <-
+  prepData(
+    # Data for cross-validation excludes test set
+    COHORT.full,
+    cols.keep,
+    process.settings,
+    surv.time, surv.event,
+    surv.event.yes,
+    extra.fun = caliberExtraPrep
+  )
+
+# Create survival object for training set
+COHORT.surv <- Surv(
+  time  = COHORT.optimised[-test.set, 'time_death'],
+  event = COHORT.optimised[-test.set, 'surv_event']
+)
+
+# Fit to whole training set
+fit.cph <- cph(surv.formula, COHORT.optimised[-test.set, ], surv = TRUE)
+
+# Get C-indices for training and test sets
+c.index.cph.train <- calcCoxCIndex(fit.cph, COHORT.optimised[-test.set, ])
+c.index.cph.test <- calcCoxCIndex(fit.cph, COHORT.optimised[test.set, ])
+
+#' # Results
+#' 
+#' ## Performance
+#' 
+#' The C-index on the full training set is **`r round(c.index.cph.train, 3)`**.
+#' 
+#' The C-index on the held-out test set is **`r round(c.index.cph.test, 3)`**.
+#' 
+#' ## Cox model fit
+#' 
+#+ cox_fit
+
+print(fit.cph)
+
+#' ## Cox coefficients
+#'
+#+ cox_coefficients_plot
+
+cph.coeffs <- cphCoeffs(fit.cph, COHORT.optimised)
+
+ggplot(cph.coeffs, aes(x = var, y = beta, group = var)) +   
+  geom_bar(aes(fill = var, group = var), width=0.9,position = position_dodge(width = 0.9), stat = "identity") +
+  geom_text(aes(label = level), position = position_dodge(width = 0.9), angle = 90, hjust = 0) +
+  theme(legend.position='none')
