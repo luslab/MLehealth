@@ -253,3 +253,77 @@ calcCoxCIndex <- function(model.fit, df) {
     )$concordance
   )
 }
+
+cphCoeffs <- function(cph.model, df) {
+  # Get the survival variables from the coefficients in the model, which are
+  # recorded as variable=level.
+  # The data frame is needed to provide the baseline levels, which don't seem to
+  # be stored in the Cox model object...
+  surv.vars <-
+    unique(sapply(strsplit(names(cph.model$coefficients), '='), firstElement))
+  # get all the possible levels by looking through the data for the levels of each
+  # variable identified above
+  surv.vars.levels <-
+    sapply(surv.vars, function(x){levels(df[,x])})
+  # create a data frame to populate with the beta values
+  surv.vars.df <- data.frame(
+    var   = rep(surv.vars, sapply(surv.vars.levels, length)),
+    level = unlist(surv.vars.levels),
+    beta  = 0 # betas are zero for all baselines, so make that the default value
+  )
+  # go through each coefficient in the survival fit...
+  for(i in 1:length(cph.model$coefficients)) {
+    # ...extract the variable name and level...
+    needle <- strsplit(names(cph.model$coefficients[i]), '=')[[1]]
+    surv.vars.df[
+      # choose the beta value of the variable at that level
+      surv.vars.df$var == needle[1] & surv.vars.df$level == needle[2], 'beta'
+      ] <- cph.model$coefficients[i] # and set it to the relevant coefficient
+  }
+  surv.vars.df
+}
+
+# Create per-patient survival curves from a data frame and a Cox model
+cphSurvivalCurves <-
+  function(
+    df,
+    surv.model,
+    surv.times = max(df$time_death)*seq(0, 1, length.out = 100)
+  ) {
+    # return a large, melted data frame of the relevant curves
+    data.frame(
+      #anonpatid = rep(df$anonpatid, each = length(surv.times)),
+      id = rep(1:nrow(df), each = length(surv.times)),
+      time_death = rep(df$time_death, each = length(surv.times)),
+      surv_event = rep(df$surv_event, each = length(surv.times)),
+      t = rep(surv.times, times = nrow(df)),
+      s = 
+        c(
+          t(
+            survest(surv.model,
+                    newdata=df,
+                    times=surv.times,
+                    conf.int = FALSE # we don't want confidence intervals
+            )$surv
+          )
+        )
+    )
+  }
+
+# Create per-patient survival curves from a data frame and a random forest
+rfSurvivalCurves <-
+  function(
+    df,
+    predict.rf
+  ) {
+    surv.times <- predict.rf$unique.death.times
+    # return a large, melted data frame of the relevant curves
+    data.frame(
+      #anonpatid = rep(df$anonpatid, each = length(surv.times)),
+      id = rep(1:nrow(df), each = length(surv.times)),
+      time_death = rep(df$time_death, each = length(surv.times)),
+      surv_event = rep(df$surv_event, each = length(surv.times)),
+      t = rep(surv.times, times = nrow(df)),
+      s = c(t(predict.rf$survival))
+    )
+  }
