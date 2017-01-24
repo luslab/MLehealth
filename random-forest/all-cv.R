@@ -3,9 +3,20 @@
 #' 
 
 data.filename <- '../../data/cohort-sanitised.csv'
-calibration.filename <- '../../output/cph-crossvalidation-try1.csv'
-results.filename <- '../../output/cph-results-try1.csv'
+calibration.filename <- '../../output/all-cvl-rf-try1.csv'
+results.filename <- '../../output/all-cv-rf-results-try1.csv'
 
+# What kind of model to fit to...currently 'cph' (Cox model), 'ranger' or
+# 'rfsrc' (two implementations of random survival forests)
+model.type <- 'ranger'
+
+# n.trees is (obviously) only relevant for random forests
+n.trees <- 500
+# The following two variables are only relevant if the model.type is 'ranger'
+split.rule <- 'logrank'
+n.threads <- 8
+
+# Cross-validation variables
 input.n.bins <- 2:20
 cv.n.folds <- 3
 n.calibrations <- 100
@@ -19,28 +30,31 @@ continuous.vars <-
 
 source('shared.R')
 
-# Define a survival model formula based on variables being used
-surv.formula <-
-  formula(
-    paste0(
-      'COHORT.surv~',
-      paste(surv.predict, collapse='+')
-    )
-  )
-
 # Load the data and convert to data frame to make column-selecting code in
 # prepData simpler
 COHORT.full <- data.frame(fread(data.filename))
 
-# We need to do a quick null preparation of the data to get its length
-COHORT.prep <-
-  prepData(
-    COHORT.full,
-    cols.keep, discretise.settings, surv.time, surv.event,
-    surv.event.yes, extra.fun = caliberExtraPrep, n.keep = n.data
-  )
+# If n.data was specified...
+if(!is.na(n.data)){
+  # Take a subset n.data in size
+  COHORT.use <- sampledf(COHORT.full, n.data)
+  rm(COHORT.full)
+} else {
+  # Use all the data
+  COHORT.use <- COHORT.full
+  rm(COHORT.full)
+  # Without n.data, need a quick null preparation of the data to get its length
+  COHORT.prep <-
+    prepData(
+      COHORT.use,
+      cols.keep, discretise.settings, surv.time, surv.event,
+      surv.event.yes, extra.fun = caliberExtraPrep, n.keep = n.data
+    )
+  n.data <- nrow(COHORT.prep)
+}
 
-test.set <- sample(1:nrow(COHORT.prep), (1/3)*nrow(COHORT.prep))
+# Define indices of test set
+test.set <- sample(1:n.data, (1/3)*n.data)
 
 # If we've not already done a calibration, then do one
 if(!file.exists(calibration.filename)) {
@@ -84,7 +98,7 @@ if(!file.exists(calibration.filename)) {
     COHORT.cv <-
       prepData(
         # Data for cross-validation excludes test set
-        COHORT.full[-test.set, ],
+        COHORT.use[-test.set, ],
         cols.keep,
         process.settings,
         surv.time, surv.event,
@@ -97,20 +111,29 @@ if(!file.exists(calibration.filename)) {
   
     for(j in 1:cv.n.folds) {
       time.start <- handyTimer()
-      # Create survival object for training set
-      COHORT.surv <- Surv(
-        time  = COHORT.cv[-cv.folds[[j]], 'time_death'],
-        event = COHORT.cv[-cv.folds[[j]], 'surv_event']
-      )
-      # Fit the Cox model to the training set
-      fit.cph <- cph(surv.formula, COHORT.cv[-cv.folds[[j]],], surv = TRUE)
-      time.learn.cph <- handyTimer(time.start)
+      # Fit model to the training set
+      surv.model.fit <-
+        survivalFit(
+          predict.vars,
+          COHORT.cv[-cv.folds[[j]],],
+          model.type = model.type,
+          n.trees = n.trees,
+          split.rule = split.rule,
+          n.threads = n.threads
+        )
+      time.learn <- handyTimer(time.start)
       
       time.start <- handyTimer()
       # Get C-indices for training and validation sets
-      c.index.cph.train <- calcCoxCIndex(fit.cph, COHORT.cv[-cv.folds[[j]],])
-      c.index.cph.val <- calcCoxCIndex(fit.cph, COHORT.cv[cv.folds[[j]],])
-      time.predict.cph <- handyTimer(time.start)
+      c.index.train <-
+        cIndex(
+          surv.model.fit, COHORT.cv[-cv.folds[[j]],], model.type = model.type
+        )
+      c.index.val <-
+        cIndex(
+          surv.model.fit, COHORT.cv[cv.folds[[j]],], model.type = model.type
+        )
+      time.predict <- handyTimer(time.start)
       
       # Append the stats we've obtained from this fold
       cv.performance <-
@@ -120,10 +143,10 @@ if(!file.exists(calibration.filename)) {
             calibration = i,
             cv.fold = j,
             as.list(n.bins),
-            c.index.cph.train,
-            c.index.cph.val,
-            time.learn.cph,
-            time.predict.cph
+            c.index.train,
+            c.index.val,
+            time.learn,
+            time.predict
           )
         )
       
@@ -142,14 +165,14 @@ if(!file.exists(calibration.filename)) {
 # First, average performance across cross-validation folds
 cv.performance.average <-
   aggregate(
-      c.index.cph.val ~ calibration,
+      c.index.val ~ calibration,
     data = cv.performance,
     mean
   )
 # Find the highest value
 best.calibration <-
   cv.performance.average$calibration[
-    which.max(cv.performance.average$c.index.cph.val)
+    which.max(cv.performance.average$c.index.val)
   ]
 # And finally, find the first row of that calibration to get the n.bins values
 best.calibration.row1 <-
@@ -191,7 +214,7 @@ for(j in 1:length(continuous.vars)) {
 COHORT.optimised <-
   prepData(
     # Data for cross-validation excludes test set
-    COHORT.full,
+    COHORT.use,
     cols.keep,
     process.settings,
     surv.time, surv.event,
@@ -199,40 +222,47 @@ COHORT.optimised <-
     extra.fun = caliberExtraPrep
   )
 
-# Create survival object for training set
-COHORT.surv <- Surv(
-  time  = COHORT.optimised[-test.set, 'time_death'],
-  event = COHORT.optimised[-test.set, 'surv_event']
-)
-
 # Fit to whole training set
-fit.cph <- cph(surv.formula, COHORT.optimised[-test.set, ], surv = TRUE)
+surv.model.fit <-
+  survivalFit(
+    predict.vars,
+    COHORT.cv[-cv.folds[[j]],],
+    model.type = model.type,
+    n.trees = n.trees,
+    split.rule = split.rule,
+    n.threads = n.threads
+  )
 
 # Get C-indices for training and test sets
-c.index.cph.train <- calcCoxCIndex(fit.cph, COHORT.optimised[-test.set, ])
-c.index.cph.test <- calcCoxCIndex(fit.cph, COHORT.optimised[test.set, ])
+c.index.train <- calcCoxCIndex(surv.model.fit, COHORT.optimised[-test.set, ])
+c.index.test <- calcCoxCIndex(surv.model.fit, COHORT.optimised[test.set, ])
 
 #' # Results
 #' 
 #' ## Performance
 #' 
-#' The C-index on the full training set is **`r round(c.index.cph.train, 3)`**.
+#' The C-index on the full training set is **`r round(c.index.train, 3)`**.
 #' 
-#' The C-index on the held-out test set is **`r round(c.index.cph.test, 3)`**.
+#' The C-index on the held-out test set is **`r round(c.index.test, 3)`**.
 #' 
-#' ## Cox model fit
+#' ## Model fit
 #' 
-#+ cox_fit
+#+ resulting_fit
 
-print(fit.cph)
+print(surv.model.fit)
 
-#' ## Cox coefficients
-#'
-#+ cox_coefficients_plot
 
-cph.coeffs <- cphCoeffs(fit.cph, COHORT.optimised)
-
-ggplot(cph.coeffs, aes(x = var, y = beta, group = var)) +   
-  geom_bar(aes(fill = var, group = var), width=0.9,position = position_dodge(width = 0.9), stat = "identity") +
-  geom_text(aes(label = level), position = position_dodge(width = 0.9), angle = 90, hjust = 0) +
-  theme(legend.position='none')
+if(model.type == 'cph') {
+  #' ## Cox coefficients
+  #'
+  #+ cox_coefficients_plot
+  
+  cph.coeffs <- cphCoeffs(fit, COHORT.optimised)
+  
+  ggplot(cph.coeffs, aes(x = var, y = beta, group = var)) +   
+    geom_bar(aes(fill = var, group = var), width=0.9,position = position_dodge(width = 0.9), stat = "identity") +
+    geom_text(aes(label = level), position = position_dodge(width = 0.9), angle = 90, hjust = 0) +
+    theme(legend.position='none')
+} else {
+  # Something in here for random forests
+}
