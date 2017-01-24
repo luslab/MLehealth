@@ -397,3 +397,54 @@ getSurvCurves <- function(
     )
   }
 }
+
+survivalFit <- function(
+  predict.vars, df, model.type = 'cph',
+  n.trees = 500, split.rule = 'logrank', n.threads = 1
+) {
+  
+  # Depending on model.type, change the name of the variable for survival time
+  if(model.type == 'cph') {
+    # Cox models can use straight death time
+    surv.time = 'time_death'
+  } else {
+    # Random forests need to use rounded death time
+    surv.time = 'time_death_round'
+  }
+  
+  # Create a survival formula with the provided variable names...
+  surv.formula <-
+    formula(
+      paste0(
+        # Survival object made in-formula
+        'Surv(', surv.time,', surv_event) ~ ',
+        # Predictor variables then make up the other side
+        paste(predict.vars, collapse = '+')
+      )
+    )
+  
+  # Then, perform the relevant type of fit depending on the model type requested 
+  if(model.type == 'cph') {
+    return(
+      cph(surv.formula, df, surv = TRUE)
+    )
+  } else if(model.type == 'ranger') {
+    return(
+      ranger(
+        surv.formula,
+        df,
+        num.trees = n.trees,
+        splitrule = split.rule,
+        num.threads = n.threads
+      )
+    )
+  } else if(model.type = 'rfsrc') {
+    return(
+      rfsrc(
+        surv.formula,
+        df,
+        ntree = n.trees
+      )
+    )
+  }
+}
