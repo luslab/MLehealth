@@ -129,7 +129,7 @@ ggplot(surv.curves.cph,
 #' 
 #+ rf_setup, message=FALSE
 
-n.trees <- 1000
+n.trees <- 500
 
 tod.round <- 0.1
 
@@ -218,7 +218,9 @@ fit.rf <-
   rfsrc(
     formula(
       paste0(
-        'COHORT.survival.round~',
+        # The Surv object must be constructed in the formula when calling rfsrc,
+        # or a 'formula is incorrectly specified' error results
+        'Surv(time_death_round, surv_event) ~ ',
         paste(surv.predict, collapse='+')
       )
     ),
@@ -228,12 +230,12 @@ fit.rf <-
 
 time.taken <- handyTimer(time.start)
 
-#' Training took `r round(time.taken/60, 1)` minutes). Let's see how we did...
+#' Training took `r round(time.taken/60, 1)` minutes. (This is slow, but ) Let's see how we did...
 
 #+ rfsrc_predict, cache=cacheoption
 
 time.start <- handyTimer()
-c.index <- calcRFCIndex(fit.rf, COHORT.test, 5)
+c.index <- cIndex(fit.rf, COHORT.test, model.type = 'rfsrc')
 time.taken <- handyTimer(time.start)
 
 #' *C = `r round(c.index, 3)`*
@@ -245,7 +247,8 @@ time.taken <- handyTimer(time.start)
 predict.rf <- predict(fit.rf, COHORT.test[random.patients,], num.threads=8)
 
 # Get their survival curves
-surv.curves.rf <- rfSurvivalCurves(COHORT.test[random.patients,], predict.rf)
+surv.curves.rf <-
+  getSurvCurves(COHORT.test[random.patients,], predict.rf, model.type = 'rfsrc')
 
 ggplot(surv.curves.rf,
        aes(
