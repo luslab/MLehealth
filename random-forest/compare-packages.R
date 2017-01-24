@@ -30,8 +30,8 @@ opts_chunk$set(cache.lazy=FALSE)
 source('prep-data.R')
 
 # Number of data points to use of each of the training and test set
-n.training <- 30000 # total 70096
-n.test     <- 20000 # total 35048
+n.training <- 70000 # total 70096
+n.test     <- 35000 # total 35048
 
 # Subset training and test data frames to only use number of patients specified
 COHORT.training <- COHORT.training.full[1:n.training,]
