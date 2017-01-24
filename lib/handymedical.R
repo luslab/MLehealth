@@ -254,6 +254,26 @@ calcCoxCIndex <- function(model.fit, df) {
   )
 }
 
+cIndex <- function(model.fit, df, model.type = 'cph', risk.time = 5) {
+  # Calculate the C-index for a Cox proportional hazards model on data in df
+  predictions <- predict(model.fit, df)
+  # If we're dealing with a ranger model, then we need to get a proxy for risk
+  if(model.type == 'ranger') {
+    risk.bin <- which.min(abs(predictions$unique.death.times - risk.time))
+    # Get the chance of having died (ie 1 - survival) for all patients at that time (ie in that bin)
+    predictions <- 1 - predictions$survival[, risk.bin]
+  } else if(model.type == 'rfsrc') {
+    # If we're dealing with a randomForestSRC model, extract the 'predicted' var
+    predictions <- predictions$predicted
+  }
+  as.numeric(
+    survConcordance(
+      Surv(time_death, surv_event) ~ predictions,
+      df
+    )$concordance
+  )
+}
+
 cphCoeffs <- function(cph.model, df) {
   # Get the survival variables from the coefficients in the model, which are
   # recorded as variable=level.
@@ -327,3 +347,53 @@ rfSurvivalCurves <-
       s = c(t(predict.rf$survival))
     )
   }
+
+getSurvCurves <- function(
+  df,
+  predictions,
+  model.type = 'cph',
+  surv.times = max(df$time_death)*seq(0, 1, length.out = 100)
+) {
+  if(model.type == 'cph') {
+    # return a large, melted data frame of the relevant curves
+    data.frame(
+      #anonpatid = rep(df$anonpatid, each = length(surv.times)),
+      id = rep(1:nrow(df), each = length(surv.times)),
+      time_death = rep(df$time_death, each = length(surv.times)),
+      surv_event = rep(df$surv_event, each = length(surv.times)),
+      t = rep(surv.times, times = nrow(df)),
+      s = 
+        c(
+          t(
+            survest(surv.model,
+                    newdata=df,
+                    times=surv.times,
+                    conf.int = FALSE # we don't want confidence intervals
+            )$surv
+          )
+        )
+    )
+  } else if(model.type == 'ranger') {
+    surv.times <- predictions$unique.death.times
+    # return a large, melted data frame of the relevant curves
+    data.frame(
+      #anonpatid = rep(df$anonpatid, each = length(surv.times)),
+      id = rep(1:nrow(df), each = length(surv.times)),
+      time_death = rep(df$time_death, each = length(surv.times)),
+      surv_event = rep(df$surv_event, each = length(surv.times)),
+      t = rep(surv.times, times = nrow(df)),
+      s = c(t(predictions$survival))
+    )
+  }  else if(model.type == 'rfsrc') {
+    surv.times <- predictions$time.interest
+    # return a large, melted data frame of the relevant curves
+    data.frame(
+      #anonpatid = rep(df$anonpatid, each = length(surv.times)),
+      id = rep(1:nrow(df), each = length(surv.times)),
+      time_death = rep(df$time_death, each = length(surv.times)),
+      surv_event = rep(df$surv_event, each = length(surv.times)),
+      t = rep(surv.times, times = nrow(df)),
+      s = c(t(predictions$survival))
+    )
+  }
+}
