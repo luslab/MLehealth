@@ -14,6 +14,8 @@ requirePlus(
   'bnlearn',
   'rms',
   'survival',
+  'ranger',
+  'randomForestSRC',
   'e1071',
   'Rgraphviz',
   'data.table',
@@ -400,7 +402,7 @@ getSurvCurves <- function(
 
 survivalFit <- function(
   predict.vars, df, model.type = 'cph',
-  n.trees = 500, split.rule = 'logrank', n.threads = 1
+  n.trees = 500, split.rule = 'logrank', n.threads = 1, tod.round = 0.1
 ) {
   
   # Depending on model.type, change the name of the variable for survival time
@@ -410,6 +412,9 @@ survivalFit <- function(
   } else {
     # Random forests need to use rounded death time
     surv.time = 'time_death_round'
+    
+    df$time_death_round <-
+      round_any(df$time_death, tod.round)
   }
   
   # Create a survival formula with the provided variable names...
@@ -438,7 +443,7 @@ survivalFit <- function(
         num.threads = n.threads
       )
     )
-  } else if(model.type = 'rfsrc') {
+  } else if(model.type == 'rfsrc') {
     return(
       rfsrc(
         surv.formula,
