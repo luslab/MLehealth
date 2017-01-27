@@ -3,12 +3,12 @@
 #' 
 
 data.filename <- '../../data/cohort-sanitised.csv'
-calibration.filename <- '../../output/all-cvl-rf-try1.csv'
-results.filename <- '../../output/all-cv-rf-results-try1.csv'
+calibration.filename <- '../../output/cph-crossvalidation-try1.csv'
+results.filename <- '../../output/cph-crossvalidation-results-try1.csv'
 
 # What kind of model to fit to...currently 'cph' (Cox model), 'ranger' or
 # 'rfsrc' (two implementations of random survival forests)
-model.type <- 'ranger'
+model.type <- 'cph'
 
 # n.trees is (obviously) only relevant for random forests
 n.trees <- 500
@@ -20,7 +20,7 @@ n.threads <- 8
 input.n.bins <- 2:20
 cv.n.folds <- 3
 n.calibrations <- 100
-n.data <- 30000
+n.data <- 30000 # This is of full dataset...further rows may be excluded in prep
 
 continuous.vars <-
   c(
@@ -37,21 +37,23 @@ COHORT.full <- data.frame(fread(data.filename))
 # If n.data was specified...
 if(!is.na(n.data)){
   # Take a subset n.data in size
-  COHORT.use <- sampledf(COHORT.full, n.data)
+  COHORT.use <- sample.df(COHORT.full, n.data)
   rm(COHORT.full)
 } else {
   # Use all the data
   COHORT.use <- COHORT.full
   rm(COHORT.full)
-  # Without n.data, need a quick null preparation of the data to get its length
-  COHORT.prep <-
-    prepData(
-      COHORT.use,
-      cols.keep, discretise.settings, surv.time, surv.event,
-      surv.event.yes, extra.fun = caliberExtraPrep, n.keep = n.data
-    )
-  n.data <- nrow(COHORT.prep)
 }
+
+# We now need a quick null preparation of the data to get its length (some rows
+# may be excluded during preparation)
+COHORT.prep <-
+  prepData(
+    COHORT.use,
+    cols.keep, discretise.settings, surv.time, surv.event,
+    surv.event.yes, extra.fun = caliberExtraPrep, n.keep = n.data
+  )
+n.data <- nrow(COHORT.prep)
 
 # Define indices of test set
 test.set <- sample(1:n.data, (1/3)*n.data)
@@ -114,7 +116,7 @@ if(!file.exists(calibration.filename)) {
       # Fit model to the training set
       surv.model.fit <-
         survivalFit(
-          predict.vars,
+          surv.predict,
           COHORT.cv[-cv.folds[[j]],],
           model.type = model.type,
           n.trees = n.trees,
@@ -165,7 +167,7 @@ if(!file.exists(calibration.filename)) {
 # First, average performance across cross-validation folds
 cv.performance.average <-
   aggregate(
-      c.index.val ~ calibration,
+    c.index.val ~ calibration,
     data = cv.performance,
     mean
   )
@@ -225,8 +227,8 @@ COHORT.optimised <-
 # Fit to whole training set
 surv.model.fit <-
   survivalFit(
-    predict.vars,
-    COHORT.cv[-cv.folds[[j]],],
+    surv.predict,
+    COHORT.optimised[-test.set,],
     model.type = model.type,
     n.trees = n.trees,
     split.rule = split.rule,
@@ -234,8 +236,10 @@ surv.model.fit <-
   )
 
 # Get C-indices for training and test sets
-c.index.train <- calcCoxCIndex(surv.model.fit, COHORT.optimised[-test.set, ])
-c.index.test <- calcCoxCIndex(surv.model.fit, COHORT.optimised[test.set, ])
+c.index.train <-
+  cIndex(surv.model.fit, COHORT.optimised[-test.set, ], model.type = model.type)
+c.index.test <- 
+  cIndex(surv.model.fit, COHORT.optimised[test.set, ], model.type = model.type)
 
 #' # Results
 #' 
@@ -257,11 +261,36 @@ if(model.type == 'cph') {
   #'
   #+ cox_coefficients_plot
   
-  cph.coeffs <- cphCoeffs(fit, COHORT.optimised)
+  cph.coeffs <- cphCoeffs(surv.model.fit, COHORT.optimised)
   
-  ggplot(cph.coeffs, aes(x = var, y = beta, group = var)) +   
-    geom_bar(aes(fill = var, group = var), width=0.9,position = position_dodge(width = 0.9), stat = "identity") +
-    geom_text(aes(label = level), position = position_dodge(width = 0.9), angle = 90, hjust = 0) +
+  for(variable in levels(cph.coeffs$var)) {
+    print(
+    ggplot(
+      subset(cph.coeffs, var == variable),
+      aes(x = level, y = exp(beta))
+    ) +   
+      geom_bar(
+        aes(fill = var),
+        width=0.9,
+        stat = "identity"
+      ) +
+      geom_text(aes(label = level),angle = 90, hjust = 0)
+    )
+  }
+  
+  ggplot(cph.coeffs, aes(x = level, y = beta, group = var)) +   
+    geom_bar(
+      aes(fill = var, group = var),
+      width=0.9,
+      position = position_dodge(width = 0.9),
+      stat = "identity"
+    ) +
+    geom_text(aes(label = level), position = position_dodge(width = 0.9), angle = 90, hjust = 0)
+  
+  
+  
+  
+  +
     theme(legend.position='none')
 } else {
   # Something in here for random forests
