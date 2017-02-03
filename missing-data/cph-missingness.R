@@ -83,10 +83,12 @@ print(surv.model.fit)
 #'
 #+ cox_coefficients_plot
 
+# TODO: doesn't work for some reason
 cph.coeffs <- cphCoeffs(surv.model.fit, COHORT.missing)
 
 ggplot(
   cph.coeffs,
+  # TODO: needs variable putting in here too - check name when cph.coeffs works
   aes(x = paste0(level,), y = exp(beta))
 ) +   
   geom_bar(
