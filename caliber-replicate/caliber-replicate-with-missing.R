@@ -303,13 +303,34 @@ c.index.train <-
 c.index.test <- 
   cIndex(fit.exp, COHORT.scaled[test.set, ], model.type = 'survreg')
 
-
-
+#' C-indices are **`r round(c.index.train, 3)`** on the training set and
+#' **`r round(c.index.test, 3)`** on the test set. Not too bad!
+#' 
+#' 
 #' ## Coefficients
+#' 
+#' As well as getting comparable C-indices, it's also worth checking to see how
+#' the risk coefficients calculated compare to those found in the original
+#' paper. Let's compare...
 
-coefficients <- -fit.exp$coeff
+# Load CSV of values from paper
+old.coefficients <- read.csv('rapsomaniki-cox-values.csv')
 
+# Get coefficients from this fit
+new.coefficients <- as.data.frame(-fit.exp$coeff)
+names(new.coefficients) <- 'our_value'
+new.coefficients$quantity <- rownames(new.coefficients)
 
+# Create a data frame comparing them
+compare.coefficients <- merge(old.coefficients, new.coefficients)
 
-cat('C-index on training set:', c.index.train, '\n')
-cat('C-index on test set:', c.index.test, '\n')
+# Plot a graph by which to judge success
+library(ggrepel)
+
+ggplot(compare.coefficients, aes(x = their_value, y = our_value)) +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_hline(yintercept = 0, colour = 'grey') +
+  geom_vline(xintercept = 0, colour = 'grey') +
+  geom_point() +
+  geom_text_repel(aes(label = long_name)) +
+  theme_classic(base_size = 8)
