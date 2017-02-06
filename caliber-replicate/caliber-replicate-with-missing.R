@@ -117,7 +117,7 @@ COHORT.scaled <-
     ## Death/censorship
     surv_event = COHORT.use$endpoint_death == 'Death',
     ## Rescaled age
-    age_rescale = sapply(COHORT.use$age, ageSpline),
+    age = sapply(COHORT.use$age, ageSpline),
     ## Gender
     gender = COHORT.use$gender,
     ## Most deprived quintile, yes vs. no
@@ -142,9 +142,9 @@ COHORT.scaled <-
     ## Diabetes mellitus, present vs. absent
     diabetes_logical = COHORT.use$diabetes != 'No diabetes',
     ## Total cholesterol, per 1 mmol/L increase
-    total_chol_6mo_rescale = (COHORT.use$total_chol_6mo - 5),
+    total_chol_6mo = (COHORT.use$total_chol_6mo - 5),
     ## HDL, per 0.5 mmol/L increase
-    hdl_6mo_rescale = (COHORT.use$hdl_6mo - 1.5) / 0.5,
+    hdl_6mo = (COHORT.use$hdl_6mo - 1.5) / 0.5,
     ### CVD co-morbidities #####################################################
     ## Heart failure, present vs. absent
     heart_failure = COHORT.use$heart_failure,
@@ -170,13 +170,13 @@ COHORT.scaled <-
     hx_anxiety = COHORT.use$hx_anxiety,
     ### Biomarkers #############################################################
     ## Heart rate, per 10 b.p.m increase
-    pulse_6mo_rescale = (COHORT.use$pulse_6mo - 70) / 10,
+    pulse_6mo = (COHORT.use$pulse_6mo - 70) / 10,
     ## Creatinine, per 30 μmol/L increase
-    crea_6mo_rescale = (COHORT.use$crea_6mo - 60) / 30,
+    crea_6mo = (COHORT.use$crea_6mo - 60) / 30,
     ## White cell count, per 1.5 109/L increase
-    total_wbc_6mo_rescale = (COHORT.use$total_wbc_6mo - 7.5) / 1.5,
+    total_wbc_6mo = (COHORT.use$total_wbc_6mo - 7.5) / 1.5,
     ## Haemoglobin, per 1.5 g/dL increase
-    haemoglobin_6mo_rescale = (COHORT.use$haemoglobin_6mo - 13.5) / 1.5
+    haemoglobin_6mo = (COHORT.use$haemoglobin_6mo - 13.5) / 1.5
   )
 
 #' ## Missing values
@@ -193,37 +193,14 @@ COHORT.scaled <-
 #'   a numeric to 0, the baseline value, therefore not having any effect on the
 #'   final survival curve.
 
-# Deal with missing values...go through all the columns
-missing.suffix <- '_missing'
+# Specify missing columns - diagnosis only has a handful of missing values so
+# sometimes doesn't have missing ones in the sampled training set
 missing.cols <-
   c(
-    'diagnosis',
-    "most_deprived", "smokstatus", "total_chol_6mo_rescale", "hdl_6mo_rescale",
-    "pulse_6mo_rescale", "crea_6mo_rescale", "total_wbc_6mo_rescale",
-    "haemoglobin_6mo_rescale"
+    "diagnosis", "most_deprived", "smokstatus", "total_chol_6mo", "hdl_6mo",
+    "pulse_6mo", "crea_6mo", "total_wbc_6mo", "haemoglobin_6mo"
   )
-for(surv.col in names(COHORT.scaled)) {
-  # ...and, if it contains any missing values
-  if(sum(is.na(COHORT.scaled[, surv.col])) > 0) {
-    print(surv.col)
-    # Create a new column which designates the missing ones
-    COHORT.scaled[, paste0(surv.col, missing.suffix)] <-
-      is.na(COHORT.scaled[, surv.col])
-    # Then, deal with the actual values to remove their effect, depending on
-    # variable type
-    if(is.factor(COHORT.scaled[, surv.col])) {
-      # If it's a factor, NAs can be their own level
-      COHORT.scaled[, surv.col] <-
-        factorNAfix(COHORT.scaled[, surv.col], NAval = 'missing')
-    } else if(is.logical(COHORT.scaled[, surv.col])) {
-      # Set the NA values to the baseline so they don't contribute to the model
-      COHORT.scaled[is.na(COHORT.scaled[, surv.col]), surv.col] <- FALSE
-    } else {
-      # Set the NA values to the baseline so they don't contribute to the model
-      COHORT.scaled[is.na(COHORT.scaled[, surv.col]), surv.col] <- 0
-    }
-  }
-}
+COHORT.scaled <- prepCoxMissing(COHORT.scaled, missing.cols)
 
 # make a survival object
 COHORT.surv.train <- Surv(
@@ -243,7 +220,7 @@ fit.exp <- survreg(
     ## Age in women, per year
     ## Women vs. men
     # ie include interaction between age and gender!
-    age_rescale +
+    age +
     gender +
     ## Most deprived quintile, yes vs. no
     most_deprived +
@@ -272,11 +249,11 @@ fit.exp <- survreg(
     ## Diabetes mellitus, present vs. absent
     diabetes_logical +
     ## Total cholesterol, per 1 mmol/L increase
-    total_chol_6mo_rescale +
-    total_chol_6mo_rescale_missing +
+    total_chol_6mo +
+    total_chol_6mo_missing +
     ## HDL, per 0.5 mmol/L increase
-    hdl_6mo_rescale +
-    hdl_6mo_rescale_missing +
+    hdl_6mo +
+    hdl_6mo_missing +
     ### CVD co-morbidities #####################################################
     ## Heart failure, present vs. absent
     heart_failure +
@@ -302,17 +279,17 @@ fit.exp <- survreg(
     hx_anxiety +
     ### Biomarkers #############################################################
     ## Heart rate, per 10 b.p.m increase
-    pulse_6mo_rescale +
-    pulse_6mo_rescale_missing +
+    pulse_6mo +
+    pulse_6mo_missing +
     ## Creatinine, per 30 μmol/L increase
-    crea_6mo_rescale +
-    crea_6mo_rescale_missing +
+    crea_6mo +
+    crea_6mo_missing +
     ## White cell count, per 1.5 109/L increase
-    total_wbc_6mo_rescale +
-    total_wbc_6mo_rescale_missing +
+    total_wbc_6mo +
+    total_wbc_6mo_missing +
     ## Haemoglobin, per 1.5 g/dL increase
-    haemoglobin_6mo_rescale +
-    haemoglobin_6mo_rescale_missing,
+    haemoglobin_6mo +
+    haemoglobin_6mo_missing,
   data = COHORT.scaled[-test.set, ],
   dist = "exponential"
 )
@@ -321,8 +298,8 @@ coefficients <- -fit.exp$coeff
 
 cat(
   'Covariate                theirs         ours
-  Age if man, years	        0.063230409    ', coefficients['age_rescale'],'
-  Age if woman, years	      0.078075876    ', coefficients['age_rescale:genderWomen'],'
+  Age if man, years	        0.063230409    ', coefficients['age'],'
+  Age if woman, years	      0.078075876    ', coefficients['age:genderWomen'],'
   Being a woman             -0.54888796    ', coefficients['genderWomen'],'
   DEPRIVATION: bottom 5th   0.140887623    ', coefficients['most_deprivedTRUE'],'
   DEPRIVATION: missing                     ', coefficients['most_deprived_missingTRUE'],'
@@ -341,10 +318,10 @@ cat(
   SMOKING: missing                         ', coefficients['most_deprived_missingTRUE'],'
   Hypertension              -0.035521708   ', coefficients['hypertensionTRUE'],'
   Diabetes                  0.185590982    ', coefficients['diabetes_logicalTRUE'],'
-  Total cholesterol         0.012691881    ', coefficients['total_chol_6mo_rescale'],'
-  Total cholesterol missing                ', coefficients['total_chol_6mo_rescale_missingTRUE'],'
-  HDL, mmol/L               0.006510087    ', coefficients['hdl_6mo_rescale'],'
-  HDL, missing                             ', coefficients['hdl_6mo_rescale_missingTRUE'],'
+  Total cholesterol         0.012691881    ', coefficients['total_chol_6mo'],'
+  Total cholesterol missing                ', coefficients['total_chol_6mo_missingTRUE'],'
+  HDL, mmol/L               0.006510087    ', coefficients['hdl_6mo'],'
+  HDL, missing                             ', coefficients['hdl_6mo_missingTRUE'],'
   CVD COMORBIDITIES
   Heart failure             0.43416416     ', coefficients['heart_failureTRUE'],'
   PAD                       0.251746864    ', coefficients['padTRUE'],'
@@ -359,14 +336,14 @@ cat(
   Depression                0.16530389     ', coefficients['hx_depressionTRUE'],'
   Anxiety                   0.159257697    ', coefficients['hx_anxietyTRUE'],'
   BIOMARKERS	
-  Heart rate, beats/min     0.093975676    ', coefficients['pulse_6mo_rescale'],'
-  Heart rate, missing                      ', coefficients['pulse_6mo_rescale_missingTRUE'],'
-  Creatinine, mmol/L        0.063882169    ', coefficients['crea_6mo_rescale'],'
-  Creatinine, missing                      ', coefficients['crea_6mo_rescale_missingTRUE'],'
-  White cell count, 109/L   0.113975087    ', coefficients['total_wbc_6mo_rescale'],'
-  White cell count, missing                ', coefficients['total_wbc_6mo_rescale_missingTRUE'],'
-  Haemoglobin, g/dL         -0.26734457    ', coefficients['haemoglobin_6mo_rescale'],'
-  Haemoglobin, missing                     ', coefficients['haemoglobin_6mo_rescale_missingTRUE'],
+  Heart rate, beats/min     0.093975676    ', coefficients['pulse_6mo'],'
+  Heart rate, missing                      ', coefficients['pulse_6mo_missingTRUE'],'
+  Creatinine, mmol/L        0.063882169    ', coefficients['crea_6mo'],'
+  Creatinine, missing                      ', coefficients['crea_6mo_missingTRUE'],'
+  White cell count, 109/L   0.113975087    ', coefficients['total_wbc_6mo'],'
+  White cell count, missing                ', coefficients['total_wbc_6mo_missingTRUE'],'
+  Haemoglobin, g/dL         -0.26734457    ', coefficients['haemoglobin_6mo'],'
+  Haemoglobin, missing                     ', coefficients['haemoglobin_6mo_missingTRUE'],
   '\n\n'
 )
 

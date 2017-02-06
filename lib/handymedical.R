@@ -166,6 +166,51 @@ prepData <- function(
   df
 }
 
+prepCoxMissing <- function(
+  df, missing.cols = NA, missing.suffix = '_missing', NAval = 'missing'
+){
+  # If a list of columns which may contain missing data wasn't provided, then
+  # find those columns which do, in fact, contain missing data.
+  # (Check length == 1 or gives a warning if testing a vector.)
+  if(length(missing.cols) == 1 & is.na(missing.cols)) {
+    missing.cols <- c()
+    for(col.name in names(df)) {
+      if(sum(is.na(df[, col.name])) > 0) {
+        missing.cols <- c(missing.cols, col.name)
+      }
+    }
+  }
+  
+  # Go through missing.cols, processing appropriately for data type
+  for(col.name in missing.cols) {
+    
+    # If it's a factor, simply create a new level for missing values
+    if(is.factor(df[, col.name])) {
+      # If it's a factor, NAs can be their own level
+      df[, surv.col] <-
+        factorNAfix(df[, col.name], NAval = NAval)
+      
+    } else {
+      # If it isn't a factor, first create a column designating missing values
+      df[, paste0(col.name, missing.suffix)] <-
+        is.na(df[, col.name])
+      
+      # Then, deal with the actual values to remove their effect, depending on
+      # variable type
+      if(is.logical(df[, col.name])) {
+        # Set the NA values to baseline so they don't contribute to the model
+        df[is.na(COHORT.scaled[, col.name]), col.name] <- FALSE
+      } else {
+        # Set the NA values to baseline so they don't contribute to the model
+        df[is.na(df[, col.name]), col.name] <- 0
+      }
+      
+    }
+  }
+  
+  df
+}
+
 plotConfusionMatrix <- function(truth, prediction, title = NA) {
   confusion.matrix <- table(truth, prediction)
   
