@@ -172,11 +172,13 @@ prepCoxMissing <- function(
   # If a list of columns which may contain missing data wasn't provided, then
   # find those columns which do, in fact, contain missing data.
   # (Check length == 1 or gives a warning if testing a vector.)
-  if(length(missing.cols) == 1 & is.na(missing.cols)) {
-    missing.cols <- c()
-    for(col.name in names(df)) {
-      if(sum(is.na(df[, col.name])) > 0) {
-        missing.cols <- c(missing.cols, col.name)
+  if(length(missing.cols) == 1) {
+    if(is.na(missing.cols)) {
+      missing.cols <- c()
+      for(col.name in names(df)) {
+        if(sum(is.na(df[, col.name])) > 0) {
+          missing.cols <- c(missing.cols, col.name)
+        }
       }
     }
   }
@@ -187,7 +189,7 @@ prepCoxMissing <- function(
     # If it's a factor, simply create a new level for missing values
     if(is.factor(df[, col.name])) {
       # If it's a factor, NAs can be their own level
-      df[, surv.col] <-
+      df[, col.name] <-
         factorNAfix(df[, col.name], NAval = NAval)
       
     } else {

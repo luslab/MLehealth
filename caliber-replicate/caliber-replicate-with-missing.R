@@ -241,9 +241,8 @@ fit.exp <- survreg(
     ## Use of nitrates, yes vs. no
     long_nitrate +
     ### CVD risk factors #######################################################
-    ## Ex-smoker / current smoker vs. never
+    ## Ex-smoker / current smoker / missing data vs. never
     smokstatus +
-    smokstatus_missing +
     ## Hypertension, present vs. absent
     hypertension +
     ## Diabetes mellitus, present vs. absent
