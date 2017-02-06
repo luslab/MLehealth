@@ -11,13 +11,13 @@ pci_6moTRUE,,PCI last 6 months,-0.429038846
 cabg_6moTRUE,,CABG last 6 months,-0.661443369
 hx_miTRUE,,Previous/recurrent MI,0.128214367
 long_nitrateTRUE,,Nitrates,0.142262066
-smokstatusEx,,SMOKING: Ex,0.104560407
-smokstatusCurrent,,SMOKING: Current,0.28
-smokstatus_missingTRUE,,SMOKING: missing,
+smokstatusEx,ex,Smoking,0.104560407
+smokstatusCurrent,current,Smoking,0.28
+smokstatus_missingTRUE,missing,Smoking,
 hypertensionTRUE,,Hypertension,-0.035521708
 diabetes_logicalTRUE,,Diabetes,0.185590982
 total_chol_6mo,,Total cholesterol,0.012691881
-total_chol_6mo_missingTRUE,,Total cholesterol missing,
+total_chol_6mo_missingTRUE,missing,Total cholesterol,
 hdl_6mo,mmol/L,HDL,0.006510087
 hdl_6mo_missingTRUE,missing,HDL,
 heart_failureTRUE,,Heart failure,0.43416416
