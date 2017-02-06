@@ -314,6 +314,10 @@ cIndex <- function(model.fit, df, model.type = 'cph', risk.time = 5) {
   } else if(model.type == 'rfsrc') {
     # If we're dealing with a randomForestSRC model, extract the 'predicted' var
     predictions <- predictions$predicted
+  } else if(model.type == 'survreg') {
+    # survreg type models give larger numbers for longer survival...this is a
+    # hack to make this return C-indices which make sense!
+    predictions <- max(predictions) - predictions
   }
   as.numeric(
     survConcordance(

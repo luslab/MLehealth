@@ -292,65 +292,24 @@ fit.exp <- survreg(
   dist = "exponential"
 )
 
-coefficients <- -fit.exp$coeff
-
-cat(
-  'Covariate                theirs         ours
-  Age if man, years	        0.063230409    ', coefficients['age'],'
-  Age if woman, years	      0.078075876    ', coefficients['age:genderWomen'],'
-  Being a woman             -0.54888796    ', coefficients['genderWomen'],'
-  DEPRIVATION: bottom 5th   0.140887623    ', coefficients['most_deprivedTRUE'],'
-  DEPRIVATION: missing                     ', coefficients['most_deprived_missingTRUE'],'
-  CAD DIAGNOSIS & SEVERITY
-  Stable_angina (ref)	      0.03           ', 'hmm - how does ref have a beta?','
-  Unstable angina	          0.023          ', coefficients['diagnosisUA'],'
-  STEMI	                    0.079863191    ', coefficients['diagnosisSTEMI'],'
-  NSTEMI                    0.260971786    ', coefficients['diagnosisNSTEMI'],'
-  PCI last 6 months	        -0.429038846   ', coefficients['pci_6moTRUE'],'
-  CABG last 6 months	      -0.661443369   ', coefficients['cabg_6moTRUE'],'
-  Previous/recurrent MI	    0.128214367    ', coefficients['hx_miTRUE'],'
-  Nitrates                  0.142262066    ', coefficients['long_nitrateTRUE'],'
-  CVD RISK FACTORS
-  SMOKING: Ex               0.104560407    ', coefficients['smokstatusEx'],'
-  SMOKING: Current          0.28           ', coefficients['smokstatusCurrent'],'
-  SMOKING: missing                         ', coefficients['smokstatus_missingTRUE'],'
-  Hypertension              -0.035521708   ', coefficients['hypertensionTRUE'],'
-  Diabetes                  0.185590982    ', coefficients['diabetes_logicalTRUE'],'
-  Total cholesterol         0.012691881    ', coefficients['total_chol_6mo'],'
-  Total cholesterol missing                ', coefficients['total_chol_6mo_missingTRUE'],'
-  HDL, mmol/L               0.006510087    ', coefficients['hdl_6mo'],'
-  HDL, missing                             ', coefficients['hdl_6mo_missingTRUE'],'
-  CVD COMORBIDITIES
-  Heart failure             0.43416416     ', coefficients['heart_failureTRUE'],'
-  PAD                       0.251746864    ', coefficients['padTRUE'],'
-  Atrial fibrillation       0.247297351    ', coefficients['hx_afTRUE'],'
-  Prior stroke              0.284611916    ', coefficients['hx_strokeTRUE'],'
-  CO-EXISTING MEDICAL CONDITIONS
-  Chronic renal disease     0.110543627    ', coefficients['hx_renalTRUE'],'
-  COPD                      0.140243473    ', coefficients['hx_copdTRUE'],'
-  Cancer                    0.32014784     ', coefficients['hx_cancerTRUE'],'
-  Chronic liver disease     0.48920724     ', coefficients['hx_liverTRUE'],'
-  PSYCHOSOCIAL CHARACTERISTICS
-  Depression                0.16530389     ', coefficients['hx_depressionTRUE'],'
-  Anxiety                   0.159257697    ', coefficients['hx_anxietyTRUE'],'
-  BIOMARKERS	
-  Heart rate, beats/min     0.093975676    ', coefficients['pulse_6mo'],'
-  Heart rate, missing                      ', coefficients['pulse_6mo_missingTRUE'],'
-  Creatinine, mmol/L        0.063882169    ', coefficients['crea_6mo'],'
-  Creatinine, missing                      ', coefficients['crea_6mo_missingTRUE'],'
-  White cell count, 109/L   0.113975087    ', coefficients['total_wbc_6mo'],'
-  White cell count, missing                ', coefficients['total_wbc_6mo_missingTRUE'],'
-  Haemoglobin, g/dL         -0.26734457    ', coefficients['haemoglobin_6mo'],'
-  Haemoglobin, missing                     ', coefficients['haemoglobin_6mo_missingTRUE'],
-  '\n\n'
-)
+#' ## Performance
+#' 
+#' Having fitted the Cox model, how did we do?
+#' 
 
 # Calculate C-indices on training and test sets
-# Get C-indices for training and test sets
 c.index.train <-
-  cIndex(fit.exp, COHORT.scaled[-test.set, ], model.type = 'cph')
+  cIndex(fit.exp, COHORT.scaled[-test.set, ], model.type = 'survreg')
 c.index.test <- 
-  cIndex(fit.exp, COHORT.scaled[test.set, ], model.type = 'cph')
+  cIndex(fit.exp, COHORT.scaled[test.set, ], model.type = 'survreg')
+
+
+
+#' ## Coefficients
+
+coefficients <- -fit.exp$coeff
+
+
 
 cat('C-index on training set:', c.index.train, '\n')
 cat('C-index on test set:', c.index.test, '\n')
