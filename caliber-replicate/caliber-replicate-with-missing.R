@@ -29,7 +29,7 @@
 #+ define_vars
 
 data.filename <- '../../data/cohort-sanitised.csv'
-n.data <- 10000 # This is of full dataset...further rows may be excluded in prep
+n.data <- NA # This is of full dataset...further rows may be excluded in prep
 
 continuous.vars <-
   c(
@@ -42,6 +42,8 @@ continuous.vars <-
 #+ setup, message=FALSE
 
 source('../random-forest/shared.R')
+require(xtable)
+require(ggrepel)
 
 # Load the data and convert to data frame to make column-selecting code in
 # prepData simpler
@@ -73,6 +75,10 @@ n.data <- nrow(COHORT.use)
 # Define indices of test set
 test.set <- sample(1:n.data, (1/3)*n.data)
 
+#' OK, we've now got **`r n.data`** patients, split into a training set of
+#' `r n.data - length(test.set)` and a test set of `r length(test.set)`.
+#'
+#'
 #' ## Transform variables
 #' 
 #' The model uses variables which have been standardised in various ways, so
@@ -194,7 +200,8 @@ COHORT.scaled <-
 #'   final survival curve.
 
 # Specify missing columns - diagnosis only has a handful of missing values so
-# sometimes doesn't have missing ones in the sampled training set
+# sometimes doesn't have missing ones in the sampled training set, meaning
+# prepCoxMissing wouldn't fix it.
 missing.cols <-
   c(
     "diagnosis", "most_deprived", "smokstatus", "total_chol_6mo", "hdl_6mo",
@@ -314,23 +321,92 @@ c.index.test <-
 #' paper. Let's compare...
 
 # Load CSV of values from paper
-old.coefficients <- read.csv('rapsomaniki-cox-values.csv')
+old.coefficients <- read.csv('rapsomaniki-cox-values-from-paper.csv')
 
 # Get coefficients from this fit
 new.coefficients <- as.data.frame(-fit.exp$coeff)
 names(new.coefficients) <- 'our_value'
+new.coefficients$our_value <- exp(new.coefficients$our_value)
 new.coefficients$quantity <- rownames(new.coefficients)
 
 # Create a data frame comparing them
 compare.coefficients <- merge(old.coefficients, new.coefficients)
 
-# Plot a graph by which to judge success
-library(ggrepel)
+# Kludge because age:genderWomen is the pure interaction term, not the risk for
+# a woman per unit of advancing spline-transformed age
+compare.coefficients[
+  compare.coefficients$quantity == 'age:genderWomen', 'our_value'
+] <-
+  compare.coefficients[
+    compare.coefficients$quantity == 'age:genderWomen', 'our_value'
+  ] *
+  compare.coefficients[
+    compare.coefficients$quantity == 'age', 'our_value'
+  ]
 
+# Plot a graph by which to judge success
 ggplot(compare.coefficients, aes(x = their_value, y = our_value)) +
   geom_abline(intercept = 0, slope = 1) +
-  geom_hline(yintercept = 0, colour = 'grey') +
-  geom_vline(xintercept = 0, colour = 'grey') +
+  geom_hline(yintercept = 1, colour = 'grey') +
+  geom_vline(xintercept = 1, colour = 'grey') +
   geom_point() +
   geom_text_repel(aes(label = long_name)) +
   theme_classic(base_size = 8)
+
+#+ coefficients_table, results='asis'
+
+print(
+  xtable(
+    data.frame(
+      variable =
+        paste(
+          compare.coefficients$long_name, compare.coefficients$unit, sep=', '
+        ),
+      compare.coefficients[c('our_value', 'their_value')]
+    ),
+    digits = c(0,0,3,3)
+  ),
+  type = 'html',
+  include.rownames = FALSE
+)
+
+#' ## Strange things about gender
+#' 
+#' The only huge outlier in this comparison is gender: being a woman is
+#' significantly safer than being a man, according to the paper, whereas we
+#' don't find a striking difference between genders, and sometimes it goes the
+#' other way!
+#' 
+
+fit.just.gender <-
+  survreg(
+    COHORT.surv.train ~ gender,
+    data = COHORT.scaled[-test.set, ],
+    dist = "exponential"
+)
+
+fit.age.gender <-
+  survreg(
+    COHORT.surv.train ~ age + gender,
+    data = COHORT.scaled[-test.set, ],
+    dist = "exponential"
+  )
+
+fit.age.gender.int <-
+  survreg(
+    COHORT.surv.train ~ age*gender,
+    data = COHORT.scaled[-test.set, ],
+    dist = "exponential"
+  )
+
+print(fit.just.gender)
+print(fit.age.gender)
+print(fit.age.gender.int)
+
+#' 
+#' It's important to remember that the output of any regression model with many
+#' terms gives the strength of a given relationship having already controlled
+#' for variation due to those other terms. So, for example, if the women in our
+#' dataset tended to be older or younger, the raw effect of gender might already
+#' be accounted for by the small difference between the age-related hazard
+#' between genders.
