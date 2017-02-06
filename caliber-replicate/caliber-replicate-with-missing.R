@@ -104,7 +104,7 @@ ggplot(df, aes(x,y)) +
 #' ### Other variables
 #' 
 #' * Most other variables in the model are simply normalised by a factor with an
-#'   offset, so build a data frame of these transformed variables.
+#'   offset.
 #' * Variables which are factors (such as diagnosis) need to make sure that
 #'   their first level is the one which was used as the baseline in the paper.
 #' * The IMD (social deprivation) score is used by flagging those patients who
@@ -181,8 +181,17 @@ COHORT.scaled <-
 
 #' ## Missing values
 #' 
-#' To incorporate missing values, we first make columns of logicals to
-#' indicate whether the value was missing or not.
+#' To incorporate missing values, we need to do different things depending on
+#' the variable type.
+#' 
+#' * If the variable is a factor, we can simply add an extra factor level
+#'   'missing' to account for missing values.
+#' * For logical or numerical values, we first make a new column of logicals to
+#'   indicate whether the value was missing or not. Those logicals will then
+#'   themselves be variables with associated beta values, giving the risk
+#'   associated with having a value missing. Then, set the a logical to FALSE or
+#'   a numeric to 0, the baseline value, therefore not having any effect on the
+#'   final survival curve.
 
 # Deal with missing values...go through all the columns
 missing.suffix <- '_missing'
@@ -222,6 +231,11 @@ COHORT.surv.train <- Surv(
   event = COHORT.scaled[-test.set, 'surv_event']
 )
 
+#' ## Survival fitting
+#' 
+#' Fit a Cox model to the preprocessed data. The paper uses a Cox model with an
+#' exponential baseline hazard, as here.
+
 fit.exp <- survreg(
   COHORT.surv.train ~
     ### Sociodemographic characteristics #######################################
@@ -229,7 +243,8 @@ fit.exp <- survreg(
     ## Age in women, per year
     ## Women vs. men
     # ie include interaction between age and gender!
-    age_rescale*gender +
+    age_rescale +
+    gender +
     ## Most deprived quintile, yes vs. no
     most_deprived +
     most_deprived_missing +
