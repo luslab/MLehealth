@@ -220,8 +220,7 @@ fit.exp <- survreg(
     ## Age in women, per year
     ## Women vs. men
     # ie include interaction between age and gender!
-    age +
-    gender +
+    age*gender +
     ## Most deprived quintile, yes vs. no
     most_deprived +
     most_deprived_missing +
@@ -314,7 +313,7 @@ cat(
   CVD RISK FACTORS
   SMOKING: Ex               0.104560407    ', coefficients['smokstatusEx'],'
   SMOKING: Current          0.28           ', coefficients['smokstatusCurrent'],'
-  SMOKING: missing                         ', coefficients['most_deprived_missingTRUE'],'
+  SMOKING: missing                         ', coefficients['smokstatus_missingTRUE'],'
   Hypertension              -0.035521708   ', coefficients['hypertensionTRUE'],'
   Diabetes                  0.185590982    ', coefficients['diabetes_logicalTRUE'],'
   Total cholesterol         0.012691881    ', coefficients['total_chol_6mo'],'
