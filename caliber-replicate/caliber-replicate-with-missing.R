@@ -1,3 +1,33 @@
+#' # Replicating Rapsomaniki _et al._ 2014 without imputation
+#' 
+#' Rapsomaniki and co-workers' paper creates a Cox hazard model to predict time
+#' to death for patients using electronic health record data.
+#' 
+#' Because such data
+#' are gathered as part of routine clinical care, some values may be missing.
+#' For example, covariates include blood tests such as creatine level, and use
+#' the most recent value no older than six months. A patient may simply not have
+#' had this test in that time period.
+#' 
+#' The approach adopted in this situation, in common with many other similar
+#' studies, is to impute missing values. This essentially involves finding
+#' patients whose other values are similar to make a best guess at the likely
+#' value of a missing datapoint. However, in the case of health records data,
+#' the missingness of a value may be informative: the fact that a certain test
+#' wasn't ordered could result from a doctor not thinking that test necessary,
+#' meaning that its absence carries information.
+#' 
+#' Whilst there are many approaches which could be employed here, this program
+#' represents arguably the simplest: we keep the Cox model as close to the
+#' published version as possible but, instead of imputing the missing data, we
+#' include it explicitly.
+#' 
+#' ## User variables
+#' 
+#' First, define some variables...
+
+#+ define_vars
+
 data.filename <- '../../data/cohort-sanitised.csv'
 n.data <- 10000 # This is of full dataset...further rows may be excluded in prep
 
@@ -6,6 +36,10 @@ continuous.vars <-
     'age', 'total_chol_6mo', 'hdl_6mo', 'pulse_6mo', 'crea_6mo',
     'total_wbc_6mo', 'haemoglobin_6mo'
   )
+
+#' ## Setup
+
+#+ setup, message=FALSE
 
 source('../random-forest/shared.R')
 
@@ -39,17 +73,23 @@ n.data <- nrow(COHORT.use)
 # Define indices of test set
 test.set <- sample(1:n.data, (1/3)*n.data)
 
-# add rescaled columns to match fit with the paper, and put baseline values at
-# the start of factors
-### Sociodemographic characteristics ###########################################
-## Age in men, per year
-## Age in women, per year
-## fitted to a cubic spline function to account for nonlinearity
+#' ## Transform variables
+#' 
+#' The model uses variables which have been standardised in various ways, so
+#' let's go through and transform our input variables in the same way...
+
+#' ### Age
+#' 
+#' Risk of death is a nonlinear function of age at the start of the study, so
+#' it is modelled with a cubic spline.
+
 ageSpline <- function(x) {
   max((x-51)/10.289,0)^3 + 
     (69-51) * (max((x-84)/10.289,0)^3) -
     ((84-51) * (max(((x-69))/10.289,0))^3)/(84-69)
 }
+
+#' Let's have a look at what that function looks like...
 
 df <- data.frame(
   x = 50:100,
@@ -58,6 +98,17 @@ df <- data.frame(
 
 ggplot(df, aes(x,y)) +
   geom_line()
+
+#' The spline function looks approximately exponential, which makes sense.
+#' 
+#' ### Other variables
+#' 
+#' * Most other variables in the model are simply normalised by a factor with an
+#'   offset, so build a data frame of these transformed variables.
+#' * Variables which are factors (such as diagnosis) need to make sure that
+#'   their first level is the one which was used as the baseline in the paper.
+#' * The IMD (social deprivation) score is used by flagging those patients who
+#'   are in the bottom quintile.
 
 COHORT.scaled <-
   data.frame(
@@ -127,6 +178,11 @@ COHORT.scaled <-
     ## Haemoglobin, per 1.5 g/dL increase
     haemoglobin_6mo_rescale = (COHORT.use$haemoglobin_6mo - 13.5) / 1.5
   )
+
+#' ## Missing values
+#' 
+#' To incorporate missing values, we first make columns of logicals to
+#' indicate whether the value was missing or not.
 
 # Deal with missing values...go through all the columns
 missing.suffix <- '_missing'
@@ -307,4 +363,4 @@ c.index.test <-
   cIndex(fit.exp, COHORT.scaled[test.set, ], model.type = 'cph')
 
 cat('C-index on training set:', c.index.train, '\n')
-cat('C-index on test set:', c.index.test)
+cat('C-index on test set:', c.index.test, '\n')
