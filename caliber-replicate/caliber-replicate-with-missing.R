@@ -31,12 +31,6 @@
 data.filename <- '../../data/cohort-sanitised.csv'
 n.data <- NA # This is of full dataset...further rows may be excluded in prep
 
-continuous.vars <-
-  c(
-    'age', 'total_chol_6mo', 'hdl_6mo', 'pulse_6mo', 'crea_6mo',
-    'total_wbc_6mo', 'haemoglobin_6mo'
-  )
-
 #' ## Setup
 
 #+ setup, message=FALSE
@@ -372,41 +366,67 @@ print(
 
 #' ## Strange things about gender
 #' 
-#' The only huge outlier in this comparison is gender: being a woman is
-#' significantly safer than being a man, according to the paper, whereas we
-#' don't find a striking difference between genders, and sometimes it goes the
-#' other way!
+#' The only huge outlier in this comparison is gender: according to the paper,
+#' being a woman is significantly safer than being a man, whereas we
+#' don't find a striking difference between genders.
 #' 
+#' Let's try some simple fits to see if this is explicable.
+#' 
+#' ### Fit based only on gender
 
-fit.just.gender <-
-  survreg(
-    COHORT.surv.train ~ gender,
-    data = COHORT.scaled[-test.set, ],
-    dist = "exponential"
+print(
+  exp(
+    -survreg(
+      COHORT.surv.train ~ gender,
+      data = COHORT.scaled[-test.set, ],
+      dist = "exponential"
+    )$coeff
+  )
 )
 
-fit.age.gender <-
-  survreg(
-    COHORT.surv.train ~ age + gender,
-    data = COHORT.scaled[-test.set, ],
-    dist = "exponential"
+#' According to a model based only on gender, women are at higher risk than men.
+#' This suggests that there are indeed confounding factors in this dataset.
+#' 
+#' ### Fit based on age and gender
+
+print(
+  exp(
+    -survreg(
+      COHORT.surv.train ~ age + gender,
+      data = COHORT.scaled[-test.set, ],
+      dist = "exponential"
+    )$coeff
   )
+)
 
-fit.age.gender.int <-
-  survreg(
-    COHORT.surv.train ~ age*gender,
-    data = COHORT.scaled[-test.set, ],
-    dist = "exponential"
+#' Once age is taken into account, it is (obviously) more dangerous to be older,
+#' and it is once again safer to be female.
+
+ggplot(COHORT.use, aes(x = age, group = gender, fill = gender)) +
+  geom_histogram(alpha = 0.8, position = 'dodge')
+
+#' And, as we can see from this histogram, this is explained by the fact that
+#' the women in this dataset do indeed tend to be older than the men.
+
+print(
+  exp(
+    -survreg(
+      COHORT.surv.train ~ age * gender,
+      data = COHORT.scaled[-test.set, ],
+      dist = "exponential"
+    )$coeff
   )
+)
 
-print(fit.just.gender)
-print(fit.age.gender)
-print(fit.age.gender.int)
-
+#' Finally, looking at a model where age and gender are allowed to interact, the
+#' results are once again a little confusing: being older is worse, which makes
+#' sense, but being a woman is again worse. This is then offset by the slightly
+#' positive interaction between age and being a woman, meaning that the overall
+#' effect of being a slightly older woman will be positive (especially because
+#' the spline function gets much larger with advancing age).
 #' 
 #' It's important to remember that the output of any regression model with many
 #' terms gives the strength of a given relationship having already controlled
-#' for variation due to those other terms. So, for example, if the women in our
-#' dataset tended to be older or younger, the raw effect of gender might already
-#' be accounted for by the small difference between the age-related hazard
-#' between genders.
+#' for variation due to those other terms. In this case, even just using two
+#' terms can give counter-intuitive results if you try to interpret coefficients
+#' in isolation.
