@@ -1,14 +1,13 @@
-#' # Cross-validating discretisation of input variables in a Cox model
+#' # Cross-validating discretisation of input variables in a survival model
 #' 
 #' 
 
 data.filename <- '../../data/cohort-sanitised.csv'
-calibration.filename <- '../../output/cph-crossvalidation-try1.csv'
-results.filename <- '../../output/cph-crossvalidation-results-try1.csv'
+calibration.filename <- '../../output/all-cv-rf-try1.csv'
 
 # What kind of model to fit to...currently 'cph' (Cox model), 'ranger' or
 # 'rfsrc' (two implementations of random survival forests)
-model.type <- 'cph'
+model.type <- 'ranger'
 
 # n.trees is (obviously) only relevant for random forests
 n.trees <- 500
@@ -224,7 +223,16 @@ COHORT.optimised <-
     extra.fun = caliberExtraPrep
   )
 
-# Fit to whole training set
+# Variable importance argument varies depending on the package being used
+if(model.type == 'ranger'){
+  var.imp.arg <- 'permutation'
+} else if(model.type == 'rfsrc') {
+  var.imp.arg <- 'permute'
+} else {
+  var.img.arg <- 'NULL'
+}
+
+# Fit to whole training set, calculating variable importance if appropriate
 surv.model.fit <-
   survivalFit(
     surv.predict,
@@ -232,7 +240,8 @@ surv.model.fit <-
     model.type = model.type,
     n.trees = n.trees,
     split.rule = split.rule,
-    n.threads = n.threads
+    n.threads = n.threads,
+    importance = var.imp.arg
   )
 
 # Get C-indices for training and test sets
@@ -255,6 +264,10 @@ c.index.test <-
 
 print(surv.model.fit)
 
+#' ## Individual variables
+#' 
+#' How we examine individual variables will vary somewhat depending on the model
+#' type fitted. Let's take a look...
 
 if(model.type == 'cph') {
   #' ## Cox coefficients
@@ -293,5 +306,45 @@ if(model.type == 'cph') {
   +
     theme(legend.position='none')
 } else {
-  # Something in here for random forests
+  # For random forests, take a look at the variable importance
+  
+  # First, load some old data
+  old.coefficients <-
+    read.csv('../caliber-replicate/rapsomaniki-cox-values-from-paper.csv')
+  
+  # Then, get the variable importance from the model just fitted
+  var.imp <-
+    data.frame(
+      var.imp = importance(surv.model.fit)/max(importance(surv.model.fit))
+    )
+  var.imp$quantity <- rownames(var.imp)
+  
+  var.imp$their_range <- NA
+  
+  for(i in 1:nrow(var.imp)) {
+    # Select rows from the data frame of past values which relate to this quantity
+    old.coeffs.i <-
+      old.coefficients[
+        old.coefficients$quantity == var.imp[i, 'quantity'], 'their_value'
+      ]
+    # If there's only one, use it
+    if(length(old.coeffs.i) == 1) {
+      var.imp$their_range[i] <- old.coeffs.i
+    # If there's more than one, take the range
+    } else {
+      # omitted value is 1, which could be the lowest risk category
+      old.coeffs.i <- c(1, old.coeffs.i)
+      var.imp$their_range[i] <- max(old.coeffs.i)/min(old.coeffs.i)
+    }
+    # If it's less than 1, inverse it because magnitude is of interest here
+    if (var.imp$their_range[i] < 1)
+      var.imp$their_range[i] <- 1/var.imp$their_range[i]
+  }
+  
+  ggplot(var.imp, aes(x = their_range, y = var.imp)) +
+    geom_point() +
+    geom_text_repel(aes(label = quantity)) +
+    # Log both...old coefficients for linearity, importance to shrink range!
+    scale_x_log10() +
+    scale_y_log10()
 }
