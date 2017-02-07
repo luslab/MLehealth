@@ -321,7 +321,7 @@ old.coefficients <- read.csv('rapsomaniki-cox-values-from-paper.csv')
 new.coefficients <- as.data.frame(-fit.exp$coeff)
 names(new.coefficients) <- 'our_value'
 new.coefficients$our_value <- exp(new.coefficients$our_value)
-new.coefficients$quantity <- rownames(new.coefficients)
+new.coefficients$quantity.level <- rownames(new.coefficients)
 
 # Create a data frame comparing them
 compare.coefficients <- merge(old.coefficients, new.coefficients)
@@ -329,13 +329,13 @@ compare.coefficients <- merge(old.coefficients, new.coefficients)
 # Kludge because age:genderWomen is the pure interaction term, not the risk for
 # a woman per unit of advancing spline-transformed age
 compare.coefficients[
-  compare.coefficients$quantity == 'age:genderWomen', 'our_value'
+  compare.coefficients$quantity.level == 'age:genderWomen', 'our_value'
 ] <-
   compare.coefficients[
-    compare.coefficients$quantity == 'age:genderWomen', 'our_value'
+    compare.coefficients$quantity.level == 'age:genderWomen', 'our_value'
   ] *
   compare.coefficients[
-    compare.coefficients$quantity == 'age', 'our_value'
+    compare.coefficients$quantity.level == 'age', 'our_value'
   ]
 
 # Plot a graph by which to judge success
@@ -403,7 +403,7 @@ print(
 #' and it is once again safer to be female.
 
 ggplot(COHORT.use, aes(x = age, group = gender, fill = gender)) +
-  geom_histogram(alpha = 0.8, position = 'dodge')
+  geom_histogram(alpha = 0.8, position = 'dodge', binwidth = 1)
 
 #' And, as we can see from this histogram, this is explained by the fact that
 #' the women in this dataset do indeed tend to be older than the men.
@@ -430,3 +430,82 @@ print(
 #' for variation due to those other terms. In this case, even just using two
 #' terms can give counter-intuitive results if you try to interpret coefficients
 #' in isolation.
+#' 
+#' ## Coefficients for missing values
+#' 
+#' Let's see how coefficients for missing values compare to the range of risks
+#' implied by the range of values for data...
+
+# Value of creatinine which would result in a 25% increased risk of death
+creatinine.25pc.risk <- 60 + 30 * log(1.25)/log(compare.coefficients[
+  compare.coefficients$quantity.level == 'crea_6mo', 'our_value'
+  ])
+
+# Equivalent value of creatinine for patients with missing data
+creatinine.missing <- 60 + 30 * 
+  log(compare.coefficients[
+    compare.coefficients$quantity.level == 'crea_6mo_missingTRUE', 'our_value'
+    ]) /
+  log(compare.coefficients[
+    compare.coefficients$quantity.level == 'crea_6mo', 'our_value'
+  ])
+
+text.y.pos <- 3500
+
+ggplot(
+  # Only plot the lowest 95 percentiles of data due to outliers
+  subset(COHORT.use, crea_6mo < quantile(crea_6mo, 0.95, na.rm = TRUE)),
+  aes(x = crea_6mo)
+) +
+  geom_histogram(bins = 30) +
+  geom_vline(xintercept = 60) +
+  annotate("text", x = 60, y = text.y.pos, angle = 270, hjust = 0, vjust = 1,
+           label = "Baseline") +
+  geom_vline(xintercept = creatinine.25pc.risk) +
+  annotate("text", x = creatinine.25pc.risk, y = text.y.pos, angle = 270,
+           hjust = 0, vjust = 1, label = "25% more risk") +
+  geom_vline(xintercept = creatinine.missing) +
+  annotate("text", x = creatinine.missing, y = text.y.pos, angle = 270,
+           hjust = 0, vjust = 1, label = "missing data eqv")
+
+#' So, having a missing creatinine value is slightly safer than having a
+#' baseline reading, which is on the low end of observed values in this cohort.
+#' Even an extremely high creatinine reading doesn't confer more than 25%
+#' additional risk.
+
+# Value which would result in a 25% increased risk of death
+hdl.10pc.risk <- 1.5 + 0.5 * log(1.1)/log(compare.coefficients[
+  compare.coefficients$quantity.level == 'hdl_6mo', 'our_value'
+  ])
+
+# Equivalent value for patients with missing data
+hdl.missing <- 1.5 + 0.5 *
+  log(compare.coefficients[
+    compare.coefficients$quantity.level == 'hdl_6mo_missingTRUE', 'our_value'
+    ]) /
+  log(compare.coefficients[
+    compare.coefficients$quantity.level == 'hdl_6mo', 'our_value'
+    ])
+
+text.y.pos <- 4000
+
+ggplot(
+  # Only plot the lowest 95 percentiles of data due to outliers
+  subset(COHORT.use, hdl_6mo < quantile(hdl_6mo, 0.95, na.rm = TRUE)),
+  aes(x = hdl_6mo)
+) +
+  geom_histogram(bins = 30) +
+  geom_vline(xintercept = 1.5) +
+  annotate("text", x = 1.5, y = text.y.pos, angle = 270, hjust = 0, vjust = 1,
+           label = "Baseline") +
+  geom_vline(xintercept = hdl.10pc.risk) +
+  annotate("text", x = hdl.10pc.risk, y = text.y.pos, angle = 270, hjust = 0,
+           vjust = 1, label = "10% more risk") +
+  geom_vline(xintercept = hdl.missing) +
+  annotate("text", x = hdl.missing, y = text.y.pos, angle = 270, hjust = 0,
+           vjust = 1, label = "missing data eqv")
+
+#' Missing HDL values seem to have the opposite effect: it's substantially more
+#' risky to have a blank value here. One possible explanation is that this is
+#' such a common blood test that its absence indicates that the patient is not
+#' seeking or receiving adequate medical care.
