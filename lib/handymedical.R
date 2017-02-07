@@ -453,7 +453,8 @@ getSurvCurves <- function(
 
 survivalFit <- function(
   predict.vars, df, model.type = 'cph',
-  n.trees = 500, split.rule = 'logrank', n.threads = 1, tod.round = 0.1
+  n.trees = 500, split.rule = 'logrank', n.threads = 1, tod.round = 0.1,
+  ...
 ) {
   
   # Depending on model.type, change the name of the variable for survival time
@@ -491,7 +492,8 @@ survivalFit <- function(
         df,
         num.trees = n.trees,
         splitrule = split.rule,
-        num.threads = n.threads
+        num.threads = n.threads,
+        ...
       )
     )
   } else if(model.type == 'rfsrc') {
