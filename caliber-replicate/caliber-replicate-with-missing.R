@@ -31,6 +31,8 @@
 data.filename <- '../../data/cohort-sanitised.csv'
 n.data <- NA # This is of full dataset...further rows may be excluded in prep
 
+output.filename <- '../../output/caliber-replicate-with-missing-try1.csv'
+
 #' ## Setup
 
 #+ setup, message=FALSE
@@ -337,6 +339,9 @@ compare.coefficients[
   compare.coefficients[
     compare.coefficients$quantity.level == 'age', 'our_value'
   ]
+
+# Save CSV of results
+write.csv(compare.coefficients, output.filename)
 
 # Plot a graph by which to judge success
 ggplot(compare.coefficients, aes(x = their_value, y = our_value)) +
