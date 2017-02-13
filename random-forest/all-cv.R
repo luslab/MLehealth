@@ -4,6 +4,8 @@
 
 data.filename <- '../../data/cohort-sanitised.csv'
 calibration.filename <- '../../output/all-cv-rf-try1.csv'
+comparison.filename <- '../../output/caliber-replicate-with-missing-try1.csv'
+output.filename <- '../../output/all-cv-rf-var-imp-try1.csv'
 
 # What kind of model to fit to...currently 'cph' (Cox model), 'ranger' or
 # 'rfsrc' (two implementations of random survival forests)
@@ -28,6 +30,7 @@ continuous.vars <-
   )
 
 source('shared.R')
+require(ggrepel)
 
 # Load the data and convert to data frame to make column-selecting code in
 # prepData simpler
@@ -308,9 +311,8 @@ if(model.type == 'cph') {
 } else {
   # For random forests, take a look at the variable importance
   
-  # First, load some old data
-  old.coefficients <-
-    read.csv('../caliber-replicate/rapsomaniki-cox-values-from-paper.csv')
+  # First, load data from Cox modelling for comparison
+  old.coefficients <- read.csv(comparison.filename)
   
   # Then, get the variable importance from the model just fitted
   var.imp <-
@@ -320,28 +322,51 @@ if(model.type == 'cph') {
   var.imp$quantity <- rownames(var.imp)
   
   var.imp$their_range <- NA
+  var.imp$our_range <- NA
   
   for(i in 1:nrow(var.imp)) {
     # Select rows from the data frame of past values which relate to this quantity
     old.coeffs.i <-
       old.coefficients[
-        old.coefficients$quantity == var.imp[i, 'quantity'], 'their_value'
+        old.coefficients$quantity == var.imp[i, 'quantity'],
+        c('their_value', 'our_value')
       ]
     # If there's only one, use it
-    if(length(old.coeffs.i) == 1) {
-      var.imp$their_range[i] <- old.coeffs.i
+    if(nrow(old.coeffs.i) == 1) {
+      var.imp$their_range[i] <- old.coeffs.i$their_value
+      var.imp$our_range[i] <- old.coeffs.i$our_value
     # If there's more than one, take the range
     } else {
       # omitted value is 1, which could be the lowest risk category
-      old.coeffs.i <- c(1, old.coeffs.i)
-      var.imp$their_range[i] <- max(old.coeffs.i)/min(old.coeffs.i)
+      old.coeffs.i <-
+        rbind(old.coeffs.i, data.frame(their_value = 1, our_value = 1))
+      var.imp$their_range[i] <-
+        max(old.coeffs.i$their_value)/min(old.coeffs.i$their_value)
+      var.imp$our_range[i] <-
+        max(old.coeffs.i$our_value)/min(old.coeffs.i$our_value)
     }
-    # If it's less than 1, inverse it because magnitude is of interest here
+    # If they're less than 1, inverse it because magnitude is of interest here
     if (var.imp$their_range[i] < 1)
       var.imp$their_range[i] <- 1/var.imp$their_range[i]
+    if (var.imp$our_range[i] < 1)
+      var.imp$our_range[i] <- 1/var.imp$our_range[i]
   }
   
+  # Save the results as a CSV
+  write.csv(var.imp, output.filename)
+
+  #' ## Variable importance vs Cox coefficients from paper
+  
   ggplot(var.imp, aes(x = their_range, y = var.imp)) +
+    geom_point() +
+    geom_text_repel(aes(label = quantity)) +
+    # Log both...old coefficients for linearity, importance to shrink range!
+    scale_x_log10() +
+    scale_y_log10()
+  
+  #' ## Variable importance vs Cox coefficients from our replication
+  
+  ggplot(var.imp, aes(x = our_range, y = var.imp)) +
     geom_point() +
     geom_text_repel(aes(label = quantity)) +
     # Log both...old coefficients for linearity, importance to shrink range!
