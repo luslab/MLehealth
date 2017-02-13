@@ -31,7 +31,10 @@
 data.filename <- '../../data/cohort-sanitised.csv'
 n.data <- NA # This is of full dataset...further rows may be excluded in prep
 
-output.filename <- '../../output/caliber-replicate-with-missing-try1.csv'
+compare.coefficients.filename <-
+  '../../output/caliber-replicate-with-missing-try1.csv'
+cox.var.imp.filename <-
+  '../../output/caliber-replicate-with-missing-var-imp-try1.csv'
 
 #' ## Setup
 
@@ -203,12 +206,12 @@ missing.cols <-
     "diagnosis", "most_deprived", "smokstatus", "total_chol_6mo", "hdl_6mo",
     "pulse_6mo", "crea_6mo", "total_wbc_6mo", "haemoglobin_6mo"
   )
-COHORT.scaled <- prepCoxMissing(COHORT.scaled, missing.cols)
+COHORT.scaled.demissed <- prepCoxMissing(COHORT.scaled, missing.cols)
 
 # make a survival object
 COHORT.surv.train <- Surv(
-  time  = COHORT.scaled[-test.set, 'time_death'],
-  event = COHORT.scaled[-test.set, 'surv_event']
+  time  = COHORT.scaled.demissed[-test.set, 'time_death'],
+  event = COHORT.scaled.demissed[-test.set, 'surv_event']
 )
 
 #' ## Survival fitting
@@ -291,7 +294,7 @@ fit.exp <- survreg(
     ## Haemoglobin, per 1.5 g/dL increase
     haemoglobin_6mo +
     haemoglobin_6mo_missing,
-  data = COHORT.scaled[-test.set, ],
+  data = COHORT.scaled.demissed[-test.set, ],
   dist = "exponential"
 )
 
@@ -302,9 +305,9 @@ fit.exp <- survreg(
 
 # Calculate C-indices on training and test sets
 c.index.train <-
-  cIndex(fit.exp, COHORT.scaled[-test.set, ], model.type = 'survreg')
+  cIndex(fit.exp, COHORT.scaled.demissed[-test.set, ], model.type = 'survreg')
 c.index.test <- 
-  cIndex(fit.exp, COHORT.scaled[test.set, ], model.type = 'survreg')
+  cIndex(fit.exp, COHORT.scaled.demissed[test.set, ], model.type = 'survreg')
 
 #' C-indices are **`r round(c.index.train, 3)`** on the training set and
 #' **`r round(c.index.test, 3)`** on the test set. Not too bad!
@@ -368,6 +371,74 @@ print(
   type = 'html',
   include.rownames = FALSE
 )
+
+#' ### Variable importance
+#' 
+#' To establish how important a given variable is in determining outcome (and to
+#' compare with other measures such as variable importance with random forests),
+#' it's helpful to find the range of risks implied by the actual values of a
+#' given variable in the data. Consequently, let's take the coefficients found,
+#' and multiply them by the approximate range of values found in the dataset,
+#' represented by the 10th and 90th percentiles to exclude outliers.
+#' 
+#' Note that we've gone back to using the COHORT.scaled variable which still
+#' includes missing values, otherwise the large number of 0s can affect
+#' the percentiles.
+#'
+#+ cox_variable_importance
+
+cox.var.imp <- data.frame()
+for(quantity in unique(compare.coefficients$quantity)) {
+  # Ditch interactions, eg age:gender, because there's no column for them, and
+  # omit 'missing' signifiers too...
+  if(!grepl(':', quantity) & !grepl('missing', quantity)) {
+    # Set output variable to NA to catch errors
+    range.quantity <- NA
+    # Select rows from the data frame values which relate to this quantity
+    coeffs.quantity <-
+      compare.coefficients[
+        compare.coefficients$quantity == quantity,
+        'our_value'
+        ]
+    # If there's only one and it's not a factor...
+    if(length(coeffs.quantity) == 1 & !is.factor(COHORT.scaled[, quantity])) {
+      # If the variable is a logical, just use that value
+      if(is.logical(COHORT.scaled[, quantity])) {
+        range.quantity <- coeffs.quantity
+      # Otherwise, it must be a continuous variable, so we need to use the range
+      # of that variable to calculate its importance
+      } else {
+        # Get 10th and 90th percentiles
+        val.range <-
+          quantile(
+            COHORT.scaled[, quantity],
+            c(0.1, 0.9), na.rm = TRUE
+          )
+        # Get the difference
+        val.range <- val.range[2] - val.range[1]
+        # Raise the risk to the power of that ratio to get the range of risks
+        range.quantity <- coeffs.quantity ^ val.range
+      }
+    # Otherwise, it's a factor so take the extremes
+    } else {
+      # omitted value is 1, which could be the lowest risk category
+      coeffs.quantity <- c(coeffs.quantity, 1)
+      range.quantity <- max(coeffs.quantity)/min(coeffs.quantity)
+    }
+    # Finally, if it's less than 1, inverse it because magnitude is of interest
+    if(range.quantity < 1)
+      range.quantity <- 1/range.quantity
+    
+    cox.var.imp <-
+      rbind(
+        cox.var.imp,
+        data.frame(quantity, our_range = range.quantity)
+      )
+  }
+}
+
+# Save CSV of results
+write.csv(cox.var.imp, cox.var.imp.filename)
 
 #' ## Strange things about gender
 #' 
