@@ -438,7 +438,7 @@ for(quantity in unique(compare.coefficients$quantity)) {
 }
 
 # Save CSV of results
-write.csv(cox.var.imp, cox.var.imp.filename)
+write.csv(cox.var.imp, cox.var.imp.filename, row.names = FALSE)
 
 #' ## Strange things about gender
 #' 
