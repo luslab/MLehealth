@@ -81,6 +81,30 @@ binByAbs <- function(x, breaks) {
   )
 }
 
+missingToBig <- function(x) {
+  # Removes missing values and gives them an extreme (high) value
+  
+  # Get a value which is definitely far higher than the maximum value, and is
+  # easy for a human to spot
+  max.x <- max(x, na.rm = TRUE)
+  # If the max is less than zero, zero will do
+  if(max.x < 0) {
+    really.big.value <- 0
+  # If the max is zero, then 100 is easy to spot
+  } else if(max.x == 0) {
+    really.big.value <- 100
+  # Finally, if the max value is positive, choose one at least 10x bigger
+  } else {
+    really.big.value <- 10*10^ceiling(log10(max.x))
+  }
+  
+  # Set the NA values to that number
+  x[is.na(x)] <- really.big.value
+  
+  # Return x
+  x
+}
+
 prepData <- function(
   # surv.event cannot be 'surv_event' or will break later!
   # The fraction of the data to use as the test set (1 - this will be used as
