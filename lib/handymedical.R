@@ -98,11 +98,8 @@ missingToBig <- function(x) {
     really.big.value <- 10*10^ceiling(log10(max.x))
   }
   
-  # Set the NA values to that number
-  x[is.na(x)] <- really.big.value
-  
-  # Return x
-  x
+  # Set the NA values to that number and return
+  NA2val(x, really.big.value)
 }
 
 prepData <- function(
