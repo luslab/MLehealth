@@ -1,41 +1,41 @@
-quantity,unit,long_name,their_value
-age,years,Age if man,1.065
-age:genderWomen,years,Age if woman,1.081
-genderWomen,female,Gender,0.204
-most_deprived,bottom quintile,IMD,1.151
-most_deprived_missingTRUE,missing,IMD,
-diagnosisCHD,,CHD,1.024
-diagnosisUA,,UA,1.021
-diagnosisSTEMI,,STEMI,1.083
-diagnosisNSTEMI,,NSTEMI,1.298
-pci_6moTRUE,,PCI,0.651
-cabg_6moTRUE,,CABG,0.516
-hx_miTRUE,,Previous MI,1.136
-long_nitrateTRUE,,Nitrates,1.152
-smokstatusEx,ex,Smoking,1.11
-smokstatusCurrent,current,Smoking,1.315
-smokstatus_missingTRUE,missing,Smoking,
-hypertensionTRUE,,Hypertension,0.965
-diabetes_logicalTRUE,,Diabetes,1.203
-total_chol_6mo,,Total cholesterol,1.012
-total_chol_6mo_missingTRUE,missing,Total cholesterol,
-hdl_6mo,mmol/L,HDL,1.006
-hdl_6mo_missingTRUE,missing,HDL,
-heart_failureTRUE,,Heart failure,1.543
-padTRUE,,PAD,1.286
-hx_afTRUE,,Atrial fibrillation,1.28
-hx_strokeTRUE,,Prior stroke,1.329
-hx_renalTRUE,,Chronic renal disease,1.116
-hx_copdTRUE,,COPD,1.15
-hx_cancerTRUE,,Cancer,1.377
-hx_liverTRUE,,Chronic liver disease,1.631
-hx_depressionTRUE,,Depression,1.179
-hx_anxietyTRUE,,Anxiety,1.172
-pulse_6mo,beats/min,Heart rate,1.098
-pulse_6mo_missingTRUE,missing,Heart rate,
-crea_6mo,mmol/L,Creatinine,1.065
-crea_6mo_missingTRUE,missing,Creatinine,
-total_wbc_6mo,10^9/L,White cell count,1.12
-total_wbc_6mo_missingTRUE,missing,White cell count,
-haemoglobin_6mo,g/dL,Haemoglobin,0.758
-haemoglobin_6mo_missingTRUE,missing,Haemoglobin,
+quantity,quantity.level,unit,long_name,their_value
+age,age,years,Age if man,1.065
+age:gender,age:genderWomen,years,Age if woman,1.081
+gender,genderWomen,female,Gender,0.204
+most_deprived,most_deprived,bottom quintile,IMD,1.151
+most_deprived_missing,most_deprived_missingTRUE,missing,IMD,
+diagnosis,diagnosisCHD,,CHD,1.024
+diagnosis,diagnosisUA,,UA,1.021
+diagnosis,diagnosisSTEMI,,STEMI,1.083
+diagnosis,diagnosisNSTEMI,,NSTEMI,1.298
+pci_6mo,pci_6moTRUE,,PCI,0.651
+cabg_6mo,cabg_6moTRUE,,CABG,0.516
+hx_mi,hx_miTRUE,,Previous MI,1.136
+long_nitrate,long_nitrateTRUE,,Nitrates,1.152
+smokstatus,smokstatusEx,ex,Smoking,1.11
+smokstatus,smokstatusCurrent,current,Smoking,1.315
+smokstatus_missing,smokstatus_missingTRUE,missing,Smoking,
+hypertension,hypertensionTRUE,,Hypertension,0.965
+diabetes_logical,diabetes_logicalTRUE,,Diabetes,1.203
+total_chol_6mo,total_chol_6mo,,Total cholesterol,1.012
+total_chol_6mo_missing,total_chol_6mo_missingTRUE,missing,Total cholesterol,
+hdl_6mo,hdl_6mo,mmol/L,HDL,1.006
+hdl_6mo_missing,hdl_6mo_missingTRUE,missing,HDL,
+heart_failure,heart_failureTRUE,,Heart failure,1.543
+pad,padTRUE,,PAD,1.286
+hx_af,hx_afTRUE,,Atrial fibrillation,1.28
+hx_stroke,hx_strokeTRUE,,Prior stroke,1.329
+hx_renal,hx_renalTRUE,,Chronic renal disease,1.116
+hx_copd,hx_copdTRUE,,COPD,1.15
+hx_cancer,hx_cancerTRUE,,Cancer,1.377
+hx_liver,hx_liverTRUE,,Chronic liver disease,1.631
+hx_depression,hx_depressionTRUE,,Depression,1.179
+hx_anxiety,hx_anxietyTRUE,,Anxiety,1.172
+pulse_6mo,pulse_6mo,beats/min,Heart rate,1.098
+pulse_6mo_missing,pulse_6mo_missingTRUE,missing,Heart rate,
+crea_6mo,crea_6mo,mmol/L,Creatinine,1.065
+crea_6mo_missing,crea_6mo_missingTRUE,missing,Creatinine,
+total_wbc_6mo,total_wbc_6mo,10^9/L,White cell count,1.12
+total_wbc_6mo_missing,total_wbc_6mo_missingTRUE,missing,White cell count,
+haemoglobin_6mo,haemoglobin_6mo,g/dL,Haemoglobin,0.758
+haemoglobin_6mo_missing,haemoglobin_6mo_missingTRUE,missing,Haemoglobin,
