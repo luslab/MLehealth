@@ -122,7 +122,7 @@ prepData <- function(
   }
   
   # Add event column to predictors to create full column list
-  columns <- c(predictors, col.time, col.event)
+  columns <- c(col.time, col.event, predictors)
   
   # Only include the columns we actually need, and don't include any which
   # aren't in the data frame because it's possible that some predictors may be
@@ -178,11 +178,12 @@ prepData <- function(
     }
   }
   
+  # Rename the survival time column
+  names(df)[names(df) == col.time] <- 'surv_time'
   # Create a column denoting censorship or otherwise of events
-  df$surv_event <- df[, col.event] == event.yes
-  
+  df$surv_event <- df[, col.event] %in% event.yes
   # Remove the event column so we don't use it as a covariate later
-  df <- df[, names(df) != col.event]
+  df[, col.event] <- NULL
   
   # If there's any more preprocessing to do, do it now!
   if(!is.null(extra.fun)) {
@@ -313,7 +314,7 @@ calcRFCIndex <- function(model.fit, df, risk.time) {
   # Return C-index
   as.numeric(
     survConcordance(
-      Surv(time_death, surv_event) ~ rf.risk.proxy,
+      Surv(surv_time, surv_event) ~ rf.risk.proxy,
       df
     )$concordance
   )
@@ -324,7 +325,7 @@ calcCoxCIndex <- function(model.fit, df) {
   predictions <- predict(model.fit, df)
   as.numeric(
     survConcordance(
-      Surv(time_death, surv_event) ~ predictions,
+      Surv(surv_time, surv_event) ~ predictions,
       df
     )$concordance
   )
@@ -348,7 +349,7 @@ cIndex <- function(model.fit, df, model.type = 'cph', risk.time = 5) {
   }
   as.numeric(
     survConcordance(
-      Surv(time_death, surv_event) ~ predictions,
+      Surv(surv_time, surv_event) ~ predictions,
       df
     )$concordance
   )
@@ -388,13 +389,13 @@ cphSurvivalCurves <-
   function(
     df,
     surv.model,
-    surv.times = max(df$time_death)*seq(0, 1, length.out = 100)
+    surv.times = max(df$surv_time)*seq(0, 1, length.out = 100)
   ) {
     # return a large, melted data frame of the relevant curves
     data.frame(
       #anonpatid = rep(df$anonpatid, each = length(surv.times)),
       id = rep(1:nrow(df), each = length(surv.times)),
-      time_death = rep(df$time_death, each = length(surv.times)),
+      surv_time = rep(df$surv_time, each = length(surv.times)),
       surv_event = rep(df$surv_event, each = length(surv.times)),
       t = rep(surv.times, times = nrow(df)),
       s = 
@@ -421,7 +422,7 @@ rfSurvivalCurves <-
     data.frame(
       #anonpatid = rep(df$anonpatid, each = length(surv.times)),
       id = rep(1:nrow(df), each = length(surv.times)),
-      time_death = rep(df$time_death, each = length(surv.times)),
+      surv_time = rep(df$surv_time, each = length(surv.times)),
       surv_event = rep(df$surv_event, each = length(surv.times)),
       t = rep(surv.times, times = nrow(df)),
       s = c(t(predict.rf$survival))
@@ -432,14 +433,14 @@ getSurvCurves <- function(
   df,
   predictions,
   model.type = 'cph',
-  surv.times = max(df$time_death)*seq(0, 1, length.out = 100)
+  surv.times = max(df$surv_time)*seq(0, 1, length.out = 100)
 ) {
   if(model.type == 'cph') {
     # return a large, melted data frame of the relevant curves
     data.frame(
       #anonpatid = rep(df$anonpatid, each = length(surv.times)),
       id = rep(1:nrow(df), each = length(surv.times)),
-      time_death = rep(df$time_death, each = length(surv.times)),
+      surv_time = rep(df$surv_time, each = length(surv.times)),
       surv_event = rep(df$surv_event, each = length(surv.times)),
       t = rep(surv.times, times = nrow(df)),
       s = 
@@ -459,7 +460,7 @@ getSurvCurves <- function(
     data.frame(
       #anonpatid = rep(df$anonpatid, each = length(surv.times)),
       id = rep(1:nrow(df), each = length(surv.times)),
-      time_death = rep(df$time_death, each = length(surv.times)),
+      surv_time = rep(df$surv_time, each = length(surv.times)),
       surv_event = rep(df$surv_event, each = length(surv.times)),
       t = rep(surv.times, times = nrow(df)),
       s = c(t(predictions$survival))
@@ -470,7 +471,7 @@ getSurvCurves <- function(
     data.frame(
       #anonpatid = rep(df$anonpatid, each = length(surv.times)),
       id = rep(1:nrow(df), each = length(surv.times)),
-      time_death = rep(df$time_death, each = length(surv.times)),
+      surv_time = rep(df$surv_time, each = length(surv.times)),
       surv_event = rep(df$surv_event, each = length(surv.times)),
       t = rep(surv.times, times = nrow(df)),
       s = c(t(predictions$survival))
@@ -487,13 +488,13 @@ survivalFit <- function(
   # Depending on model.type, change the name of the variable for survival time
   if(model.type == 'cph') {
     # Cox models can use straight death time
-    surv.time = 'time_death'
+    surv.time = 'surv_time'
   } else {
     # Random forests need to use rounded death time
-    surv.time = 'time_death_round'
+    surv.time = 'surv_time_round'
     
-    df$time_death_round <-
-      round_any(df$time_death, tod.round)
+    df$surv_time_round <-
+      round_any(df$surv_time, tod.round)
   }
   
   # Create a survival formula with the provided variable names...

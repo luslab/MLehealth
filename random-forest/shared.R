@@ -48,7 +48,7 @@ discretise.quantiles <- c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1)
 # above.
 discretise.settings <-
   list(
-    var        = c('anonpatid', 'time_death', 'imd_score', 'exclude'),
+    var        = c('anonpatid', 'surv_time', 'imd_score', 'exclude'),
     method     = c(NA, NA, NA, NA),
     settings   = list(NA, NA, NA, NA)
   )
@@ -64,7 +64,7 @@ caliberExtraPrep <- function(df) {
   df <-
     df[
         # remove negative times to death
-        df$time_death > 0 &
+        df$surv_time > 0 &
         # remove patients who should be excluded
         !df$exclude
       ,
