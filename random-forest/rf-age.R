@@ -12,6 +12,8 @@ opts_chunk$set(cache.lazy = FALSE)
 #' It seems that, no matter what I do, the C-index of a model, random forest or
 #' otherwise, is about 0.78. I decided to try to some simpler models, intially
 #' based purely on age which is clearly the biggest factor in this dataset.
+#' (And, I assume, most datasets where a reasonably broad range of ages is
+#' present.)
 #' 
 #' The sanity check works: giving the model more data does indeed result in a
 #' better fit. However, on top of that, I was surprised by just how good the
@@ -164,6 +166,63 @@ c.index.test <-
 
 #' The C-index on the held-out test set is **`r round(c.index.test, 3)`**.
 
+
+#' ### Age, gender and history of liver disease
+#' 
+#' Let's add a third variable. In the replication of the Cox model with missing
+#' data included, liver disease was the most predictive factor after age, so
+#' it's a reasonable next variable to add.
+
+#+ age_gender_liver_model, cache=cacheoption
+
+# Fit random forest
+surv.model.fit <-
+  survivalFit(
+    c('age', 'gender', 'hx_liver'),
+    COHORT.prep[-test.set,],
+    model.type = 'ranger',
+    n.trees = n.trees,
+    split.rule = 'logrank',
+    n.threads = 8,
+    respect.unordered.factors = 'partition'
+  )
+
+print(surv.model.fit)
+
+# Get C-index
+c.index.test <- 
+  cIndex(surv.model.fit, COHORT.prep[test.set, ], model.type = 'ranger')
+
+#' The C-index on the held-out test set is **`r round(c.index.test, 3)`**.
+
+#' ### Age, gender and heart failure
+#' 
+#' A different third variable: heart failure, the second most important variable
+#' (after age) from random forest modelling.
+
+#+ age_gender_hf_model, cache=cacheoption
+
+# Fit random forest
+surv.model.fit <-
+  survivalFit(
+    c('age', 'gender', 'heart_failure'),
+    COHORT.prep[-test.set,],
+    model.type = 'ranger',
+    n.trees = n.trees,
+    split.rule = 'logrank',
+    n.threads = 8,
+    respect.unordered.factors = 'partition'
+  )
+
+print(surv.model.fit)
+
+# Get C-index
+c.index.test <- 
+  cIndex(surv.model.fit, COHORT.prep[test.set, ], model.type = 'ranger')
+
+#' The C-index on the held-out test set is **`r round(c.index.test, 3)`**.
+
+
 #' ### Just gender
 #' 
 #' Just gender, as a sanity check.
@@ -268,16 +327,28 @@ c.index.age.on.age <-
 
 #' This comes out as **`r round(c.index.age.on.age, 3)`**, as compared to
 #' **`r round(c.index.test.all.not.age, 3)`**, which was the C-index for the
-#' survival model based on all other variables. This is slightly worse, but
-#' that is what you'd expect: in some sense it's the amount of the C-index for
-#' survival accounted for by the random survival forest inferring age from other
-#' variables, ie, as expected, most of it.
-
+#' survival model based on all other variables.
+#' 
+#' This makes sense. The maths of C-indices is a bit tricky (how much they add
+#' to one-another depends in large part of how correlated the variables are, as
+#' well as probably being somewhat non-linear anyway),
+#' but clearly some significant fraction of the all-except-age model's
+#' predictive power comes from its ability to infer age from the remaining
+#' variables, and then use _that_ (implicitly) to predict time to death.
+#' 
+#' The mechanism for this could be that people are likely to
+#' get more diseases as they get older, so if you have a, b _and_ c you're
+#' likely to be older. Second-order predictivity may occur if particular
+#' combinations of disorders or test results are common in certain age groups.
+#'
 #' ## Conclusion
 #' 
-#' So, in conclusion, the sanity check does appear to show sanity: giving the
-#' random forest model more data to work with improves its performance. The
+#' So, in conclusion, the sanity check has worked: giving the
+#' random forest model more data to work with improves its performance. Age
+#' alone is less predictive, adding gender makes it slightly more predictive,
+#' and so on.
+#' 
+#' Further, though, a huge amount of the model's predictivity arises from just
+#' a patien's age. Not only is that alone a good predictor, but the
 #' reasonable performance on the model of all factors except age is explained in
-#' part by those factors' ability to act as a proxy for age (eg perhaps people
-#' get more diseases as they get older, so if you have a, b _and_ c you're
-#' likely to be older).
+#' part by those factors' ability to act as a proxy for age.
