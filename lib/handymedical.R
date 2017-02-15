@@ -119,6 +119,9 @@ prepData <- function(
   if(!is.na(n.keep)) {
     # Keep rows at random to avoid bias
     df <- sample.df(df, n.keep)
+  } else {
+    # If there was no n.keep, we should still randomise the rows for consistency
+    df <- sample.df(df, nrow(df))
   }
   
   # Add event column to predictors to create full column list
