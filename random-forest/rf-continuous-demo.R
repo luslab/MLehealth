@@ -17,8 +17,6 @@ opts_chunk$set(cache.lazy = FALSE)
 
 data.filename <- '../../data/cohort-sanitised.csv'
 
-endpoint <- 'mi' # Change to MI to look for MI...anything else uses death
-
 n.trees <- 500
 
 continuous.vars <-
@@ -26,19 +24,26 @@ continuous.vars <-
     'age', 'total_chol_6mo', 'hdl_6mo', 'pulse_6mo', 'crea_6mo',
     'total_wbc_6mo', 'haemoglobin_6mo'
   )
-untransformed.vars <- c('anonpatid', 'surv_time', 'imd_score', 'exclude')
+untransformed.vars <- c('anonpatid', 'time_death', 'imd_score', 'exclude')
 
 source('shared.R')
 require(ggrepel)
 
-# If we're looking at MI rather than all-cause mortality...
-if(endpoint == 'mi'){
-  surv.time      <- 'time_coronary'
-  surv.event     <- 'endpoint_coronary'
-  surv.event.yes <- c('Nonfatal MI', 'Coronary death')
-}
+#' ## missingToBig
+#' 
+#' The continuous variables with missing values will have them shunted to the
+#' large end of the range by `missingToBig`. This turns NAs into a value larger
+#' than any present in the data, and rounded up nicely so as to be
+#' human-readable. For example, if all the data are negative, it uses 0; if the
+#' data include 0, it goes with 100; and if the data are positive, it uses 1
+#' followed by enough zeros to be at least ten times larger than the largest
+#' data value.
 
-#' ## Fit random forest model
+print(missingToBig(c(-3.1, NA)))
+print(missingToBig(c(0, NA)))
+print(missingToBig(c(4.7, NA)))
+
+#' ## Model time!
 
 # Load the data and convert to data frame to make column-selecting code in
 # prepData simpler
