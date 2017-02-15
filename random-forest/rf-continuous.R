@@ -31,13 +31,6 @@ untransformed.vars <- c('anonpatid', 'surv_time', 'imd_score', 'exclude')
 source('shared.R')
 require(ggrepel)
 
-# If we're looking at MI rather than all-cause mortality...
-if(endpoint == 'mi'){
-  surv.time      <- 'time_coronary'
-  surv.event     <- 'endpoint_coronary'
-  surv.event.yes <- c('Nonfatal MI', 'Coronary death')
-}
-
 #' ## Fit random forest model
 
 # Load the data and convert to data frame to make column-selecting code in

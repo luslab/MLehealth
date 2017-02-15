@@ -33,12 +33,28 @@ surv.predict <- c(
 exclude.vars <- c('hx_mi')
 surv.predict <- surv.predict[!(surv.predict %in% exclude.vars)]
 
-# Name of column giving time for use in survival object
-surv.time    <- 'time_death'
-# Name of event column for survival object
-surv.event   <- 'endpoint_death' # Cannot be 'surv_event' or will break later!
-# Value of surv.event column if an event is recorded
-surv.event.yes <- 'Death'
+# Check to see if endpoint exists to avoid error
+if(!exists(endpoint)) {
+  # Default is all-cause mortality
+  endpoint <- 'death'
+}
+
+# If we're looking at MI...
+if(endpoint == 'mi'){
+  surv.time      <- 'time_coronary'
+  surv.event     <- 'endpoint_coronary'
+  surv.event.yes <- c('Nonfatal MI', 'Coronary death')
+# Default is all-cause mortality...
+} else {
+  # Name of column giving time for use in survival object
+  surv.time    <- 'time_death'
+  # Name of event column for survival object
+  surv.event   <- 'endpoint_death' # Cannot be 'surv_event' or will break later!
+  # Value of surv.event column if an event is recorded
+  surv.event.yes <- 'Death'
+}
+
+
 
 # Quantile boundaries for discretisation
 discretise.quantiles <- c(0, 0.1, 0.25, 0.5, 0.75, 0.9, 1)
