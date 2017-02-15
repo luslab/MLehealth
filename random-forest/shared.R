@@ -34,7 +34,7 @@ exclude.vars <- c('hx_mi')
 surv.predict <- surv.predict[!(surv.predict %in% exclude.vars)]
 
 # Check to see if endpoint exists to avoid error
-if(!exists(endpoint)) {
+if(!exists('endpoint')) {
   # Default is all-cause mortality
   endpoint <- 'death'
 }
