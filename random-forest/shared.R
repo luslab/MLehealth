@@ -2,7 +2,7 @@
 #' We start by preparing the data for reproducible comparisons...
 
 # Set the random seed for reproducibility
-random.seed <- 35498
+random.seed <- 35498L
 
 # Specify the data file containing the patient cohort
 cohort.file <- '../../../data/cohort-sanitised.csv'
@@ -72,6 +72,10 @@ discretise.settings <-
 ################################################################################
 ### END USER VARIABLES #########################################################
 ################################################################################
+
+if(!is.na(random.seed)) {
+  set.seed(random.seed)
+}
 
 source('../lib/handymedical.R', chdir = TRUE)
 
