@@ -30,11 +30,13 @@
 
 data.filename <- '../../data/cohort-sanitised.csv'
 n.data <- NA # This is of full dataset...further rows may be excluded in prep
+endpoint <- 'mi'
 
+old.coefficients.filename <- 'rapsomaniki-cox-values-from-paper-mi.csv'
 compare.coefficients.filename <-
-  '../../output/caliber-replicate-with-missing-try1.csv'
+  '../../output/caliber-replicate-with-missing-mi-try1.csv'
 cox.var.imp.filename <-
-  '../../output/caliber-replicate-with-missing-var-imp-try1.csv'
+  '../../output/caliber-replicate-with-missing-mi-var-imp-try1.csv'
 
 #' ## Setup
 
@@ -118,9 +120,9 @@ ggplot(df, aes(x,y)) +
 COHORT.scaled <-
   data.frame(
     ## Time to event
-    time_death = COHORT.use$time_death,
+    surv_time = COHORT.use[, surv.time],
     ## Death/censorship
-    surv_event = COHORT.use$endpoint_death == 'Death',
+    surv_event = COHORT.use[, surv.event] %in% surv.event.yes,
     ## Rescaled age
     age = sapply(COHORT.use$age, ageSpline),
     ## Gender
@@ -210,7 +212,7 @@ COHORT.scaled.demissed <- prepCoxMissing(COHORT.scaled, missing.cols)
 
 # make a survival object
 COHORT.surv.train <- Surv(
-  time  = COHORT.scaled.demissed[-test.set, 'time_death'],
+  time  = COHORT.scaled.demissed[-test.set, 'surv_time'],
   event = COHORT.scaled.demissed[-test.set, 'surv_event']
 )
 
@@ -320,7 +322,7 @@ c.index.test <-
 #' paper. Let's compare...
 
 # Load CSV of values from paper
-old.coefficients <- read.csv('rapsomaniki-cox-values-from-paper.csv')
+old.coefficients <- read.csv(old.coefficients.filename)
 
 # Get coefficients from this fit
 new.coefficients <- as.data.frame(-fit.exp$coeff)
