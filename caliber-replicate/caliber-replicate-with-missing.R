@@ -30,13 +30,13 @@
 
 data.filename <- '../../data/cohort-sanitised.csv'
 n.data <- NA # This is of full dataset...further rows may be excluded in prep
-endpoint <- 'mi'
+endpoint <- 'death'
 
-old.coefficients.filename <- 'rapsomaniki-cox-values-from-paper-mi.csv'
+old.coefficients.filename <- 'rapsomaniki-cox-values-from-paper.csv'
 compare.coefficients.filename <-
-  '../../output/caliber-replicate-with-missing-mi-try1.csv'
+  '../../output/caliber-replicate-with-missing-try1.csv'
 cox.var.imp.filename <-
-  '../../output/caliber-replicate-with-missing-mi-var-imp-try1.csv'
+  '../../output/caliber-replicate-with-missing-var-imp-try1.csv'
 
 #' ## Setup
 
@@ -407,6 +407,8 @@ for(quantity in unique(compare.coefficients$quantity)) {
       # If the variable is a logical, just use that value
       if(is.logical(COHORT.scaled[, quantity])) {
         range.quantity <- coeffs.quantity
+        max.quantity   <- max(1, coeffs.quantity)
+        min.quantity   <- min(1, coeffs.quantity)
       # Otherwise, it must be a continuous variable, so we need to use the range
       # of that variable to calculate its importance
       } else {
@@ -416,16 +418,19 @@ for(quantity in unique(compare.coefficients$quantity)) {
             COHORT.scaled[, quantity],
             c(0.1, 0.9), na.rm = TRUE
           )
-        # Get the difference
-        val.range <- val.range[2] - val.range[1]
+        range.risk <- coeffs.quantity ^ val.range
         # Raise the risk to the power of that ratio to get the range of risks
-        range.quantity <- coeffs.quantity ^ val.range
+        range.quantity <- range.risk[1] / range.risk[2]
+        max.quantity   <- max(range.risk)
+        min.quantity   <- min(range.risk)
       }
     # Otherwise, it's a factor so take the extremes
     } else {
       # omitted value is 1, which could be the lowest risk category
       coeffs.quantity <- c(coeffs.quantity, 1)
-      range.quantity <- max(coeffs.quantity)/min(coeffs.quantity)
+      max.quantity   <- max(range.risk)
+      min.quantity   <- min(range.risk)
+      range.quantity <- max.quantity/min.quantity
     }
     # Finally, if it's less than 1, inverse it because magnitude is of interest
     if(range.quantity < 1)
@@ -434,7 +439,12 @@ for(quantity in unique(compare.coefficients$quantity)) {
     cox.var.imp <-
       rbind(
         cox.var.imp,
-        data.frame(quantity, our_range = range.quantity)
+        data.frame(
+          quantity,
+          our_range = range.quantity,
+          max_risk = max.quantity,
+          min_risk = min.quantity
+        )
       )
   }
 }
@@ -587,3 +597,53 @@ ggplot(
 #' risky to have a blank value here. One possible explanation is that this is
 #' such a common blood test that its absence indicates that the patient is not
 #' seeking or receiving adequate medical care.
+#' 
+#' ## Systematic analysis of missing values
+#' 
+#' Clearly the danger (or otherwise) of having missing values differs by
+#' variable, according to this model. Let's look at all of the variables, to see
+#' how all missing values compare, and whether they make sense.
+#'
+#+ missing_values_vs_ranges
+
+# Create a column for missing risk, initially empty
+cox.var.imp$missing_risk <- NA
+# Go through the rows of the data frame, looking for missing value risks...
+for(i in 1:nrow(cox.var.imp)) {
+  # Does it have a missing value value?
+  if(
+    paste0(cox.var.imp$quantity[i], '_missingTRUE') %in% 
+    compare.coefficients$quantity.level
+  ) {
+    # If so, add it
+    cox.var.imp$missing_risk[i] <-
+      compare.coefficients[
+        compare.coefficients$quantity.level == 
+          paste0(cox.var.imp$quantity[i], '_missingTRUE'),
+        'our_value'
+        ]
+  }
+}
+
+# Now, let's draw a graph of those values
+ggplot(
+  subset(cox.var.imp, !is.na(cox.var.imp$missing_risk)),
+  aes(x = quantity, y = missing_risk)
+) +
+  geom_point() +
+  geom_errorbar(aes(ymin = min_risk, ymax = max_risk))
+
+#' ## Conclusion
+#' 
+#' That's all folks! Just to confirm that this is reproducible, let's check that
+#' our random number generator is lined up as expected after all those
+#' calculations. If your seed is the same, you should expect the two random
+#' strings to be the same too.
+#' 
+#' Original random seed: 35498 (found in ``../random-forests/shared.R``);
+#' current random seed: `r random.seed`
+#' 
+#' 
+#' Original random string: ``HLIQGMTCWIVJIMXWKUYL``
+#' 
+#' Current random string: ```r randomString(20, LETTERS)```
