@@ -12,15 +12,6 @@ cohort.file <- '../../../data/cohort-sanitised.csv'
 test.fraction <- 1/3
 
 # Column names of variables to use for predictions
-cols.keep <- c(
-  'age', 'gender', 'most_deprived', 'diagnosis', 'pci_6mo', 'cabg_6mo', 'hx_mi',
-  'long_nitrate', 'smokstatus', 'hypertension', 'diabetes', 'total_chol_6mo',
-  'hdl_6mo', 'heart_failure', 'pad', 'hx_af', 'hx_stroke', 'hx_renal',
-  'hx_copd', 'hx_cancer', 'hx_liver', 'hx_depression', 'hx_anxiety',
-  'pulse_6mo', 'crea_6mo', 'total_wbc_6mo','haemoglobin_6mo',
-  'exclude', 'imd_score'
-  )
-
 surv.predict <- c(
   'age', 'gender', 'most_deprived', 'diagnosis', 'pci_6mo', 'cabg_6mo', 'hx_mi',
   'long_nitrate', 'smokstatus', 'hypertension', 'diabetes', 'total_chol_6mo',
@@ -29,6 +20,8 @@ surv.predict <- c(
   'pulse_6mo', 'crea_6mo', 'total_wbc_6mo','haemoglobin_6mo',
   'most_deprived'
 )
+
+cols.keep <- c(surv.predict, 'exclude', 'imd_score')
 
 exclude.vars <- c('hx_mi')
 surv.predict <- surv.predict[!(surv.predict %in% exclude.vars)]
