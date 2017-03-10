@@ -19,6 +19,7 @@ requirePlus(
   'e1071',
   'Rgraphviz',
   'data.table',
+  'boot',
   install = FALSE
 )
 
@@ -485,11 +486,11 @@ getSurvCurves <- function(
 survivalFit <- function(
   predict.vars, df, model.type = 'cph',
   n.trees = 500, split.rule = 'logrank', n.threads = 1, tod.round = 0.1,
-  ...
+  bootstraps = 200, ...
 ) {
   
   # Depending on model.type, change the name of the variable for survival time
-  if(model.type == 'cph') {
+  if(model.type %in% c('cph', 'survreg', 'survreg.boot')) {
     # Cox models can use straight death time
     surv.time = 'surv_time'
   } else {
@@ -516,6 +517,22 @@ survivalFit <- function(
     return(
       cph(surv.formula, df, surv = TRUE)
     )
+  } else if(model.type == 'survreg') {
+    return(
+      survreg(surv.formula, df, dist = 'exponential')
+    )
+  } else if(model.type == 'survreg.boot') {
+    return(
+      boot(
+        formula = surv.formula,
+        data = df,
+        statistic = bootstrapFit,
+        fit.fun = survreg,
+        R = bootstraps,
+        dist = 'exponential',
+        ...
+      )
+    )
   } else if(model.type == 'ranger') {
     return(
       ranger(
@@ -536,4 +553,30 @@ survivalFit <- function(
       )
     )
   }
+}
+
+bootstrapFit <- function(formula, data, indices, fit.fun, ...) {
+  # Wrapper function to pass generic fitting functions to boot for
+  # bootstrapping. This is actually called by boot, so much of this isn't
+  # specified manually.
+  #
+  # Args:
+  #   formula: The formula to fit with, given by the formula argument in boot.
+  #      data: The data to fit, given by the data argument in boot.
+  #   indices: Used internally by boot to select each bootstrap sample.
+  #   fit.fun: The function you'd like to use to fit with, eg lm, cph, survreg,
+  #            etc. You pass this to boot as part of its ... arguments, so
+  #            provide it as fit.fun. It must return something sensible when
+  #            acted on by the coef function.
+  #       ...: Other arguments to your fitting function. This is now a nested
+  #            ..., since you'll put these hypothetical arguments in boot's ...
+  #            to pass here, to pass to your fitting function.
+  #
+  # Returns:
+  #   The coefficients of the fit, which are then aggregated over multiple
+  #   passes by boot to construct estimates of variation in parameters.
+  
+  d <- data[indices,]
+  fit <- fit.fun(formula, data = d, ...)
+  return(coef(fit))
 }
