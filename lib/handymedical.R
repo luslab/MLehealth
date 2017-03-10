@@ -555,7 +555,7 @@ survivalFit <- function(
   }
 }
 
-bootstrapFit <- function(formula, data, indices, fit.fun, ...) {
+bootstrapFit <- function(formula, data, indices, fit.fun) {
   # Wrapper function to pass generic fitting functions to boot for
   # bootstrapping. This is actually called by boot, so much of this isn't
   # specified manually.
@@ -579,4 +579,29 @@ bootstrapFit <- function(formula, data, indices, fit.fun, ...) {
   d <- data[indices,]
   fit <- fit.fun(formula, data = d, ...)
   return(coef(fit))
+}
+
+bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
+  # Wrapper function to pass a survreg fit with c-index calculations to boot.
+  
+  d <- data[indices,]
+  fit <- survreg(formula, data = d, dist = 'exponential')
+  # Return fit coefficients, c-index on training data, c-index on test data
+  return(
+    c(
+      coef(fit),
+      c.train = cIndex(fit, data, model.type = 'survreg'),
+      c.test = cIndex(fit, test.data, model.type = 'survreg')
+    )
+  )
+}
+
+bootStats <- function(bootfit) {
+  # Return a data frame with the statistics from a bootstrapped fit
+  return(
+    data.frame(
+      val  = bootfit$t0,
+      err  = sqrt(apply(bootfit$t, 2, var))
+    )
+  )
 }
