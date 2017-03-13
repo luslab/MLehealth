@@ -596,12 +596,22 @@ bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
   )
 }
 
-bootStats <- function(bootfit) {
+bootStats <- function(bootfit, transform = identity) {
   # Return a data frame with the statistics from a bootstrapped fit
+  #
+  # Args:
+  #    bootfit: A boot object.
+  #  transform: Optional transform for the statistics, defaults to identity, ie
+  #             leave the values as they are. Useful if you want the value and
+  #             variance of the exp(statistic), etc.
   return(
     data.frame(
-      val  = bootfit$t0,
-      err  = sqrt(apply(bootfit$t, 2, var))
+      val  = transform(bootfit$t0),
+      err  = sqrt(apply(transform(bootfit$t), 2, var))
     )
   )
+}
+
+negExp <- function(x) {
+  exp(-x)
 }
