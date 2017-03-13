@@ -1,41 +1,41 @@
-quantity,quantity.level,unit,long_name,their_value
-age,age,years,Age if man,1.065
-age:gender,age:genderWomen,years,Age if woman,1.081
-gender,genderWomen,female,Gender,0.204
-most_deprived,most_deprived,bottom quintile,IMD,1.151
-most_deprived_missing,most_deprived_missingTRUE,missing,IMD,
-diagnosis,diagnosisCHD,,CHD,1.024
-diagnosis,diagnosisUA,,UA,1.021
-diagnosis,diagnosisSTEMI,,STEMI,1.083
-diagnosis,diagnosisNSTEMI,,NSTEMI,1.298
-pci_6mo,pci_6moTRUE,,PCI,0.651
-cabg_6mo,cabg_6moTRUE,,CABG,0.516
-hx_mi,hx_miTRUE,,Previous MI,1.136
-long_nitrate,long_nitrateTRUE,,Nitrates,1.152
-smokstatus,smokstatusEx,ex,Smoking,1.11
-smokstatus,smokstatusCurrent,current,Smoking,1.315
-smokstatus_missing,smokstatus_missingTRUE,missing,Smoking,
-hypertension,hypertensionTRUE,,Hypertension,0.965
-diabetes_logical,diabetes_logicalTRUE,,Diabetes,1.203
-total_chol_6mo,total_chol_6mo,,Total cholesterol,1.012
-total_chol_6mo_missing,total_chol_6mo_missingTRUE,missing,Total cholesterol,
-hdl_6mo,hdl_6mo,mmol/L,HDL,1.006
-hdl_6mo_missing,hdl_6mo_missingTRUE,missing,HDL,
-heart_failure,heart_failureTRUE,,Heart failure,1.543
-pad,padTRUE,,PAD,1.286
-hx_af,hx_afTRUE,,Atrial fibrillation,1.28
-hx_stroke,hx_strokeTRUE,,Prior stroke,1.329
-hx_renal,hx_renalTRUE,,Chronic renal disease,1.116
-hx_copd,hx_copdTRUE,,COPD,1.15
-hx_cancer,hx_cancerTRUE,,Cancer,1.377
-hx_liver,hx_liverTRUE,,Chronic liver disease,1.631
-hx_depression,hx_depressionTRUE,,Depression,1.179
-hx_anxiety,hx_anxietyTRUE,,Anxiety,1.172
-pulse_6mo,pulse_6mo,beats/min,Heart rate,1.098
-pulse_6mo_missing,pulse_6mo_missingTRUE,missing,Heart rate,
-crea_6mo,crea_6mo,mmol/L,Creatinine,1.065
-crea_6mo_missing,crea_6mo_missingTRUE,missing,Creatinine,
-total_wbc_6mo,total_wbc_6mo,10^9/L,White cell count,1.12
-total_wbc_6mo_missing,total_wbc_6mo_missingTRUE,missing,White cell count,
-haemoglobin_6mo,haemoglobin_6mo,g/dL,Haemoglobin,0.758
-haemoglobin_6mo_missing,haemoglobin_6mo_missingTRUE,missing,Haemoglobin,
+quantity,quantity.level,unit,long_name,their_value,their_lower,their_upper
+age,age,years,Age if man,1.065,1.063,1.067
+age:gender,age:genderWomen,years,Age if woman,1.081,1.078,1.083
+gender,genderWomen,female,Gender,0.204,0.162,0.257
+most_deprived,most_deprived,bottom quintile,IMD,1.151,1.111,1.192
+most_deprived_missing,most_deprived_missingTRUE,missing,IMD,,,
+diagnosis,diagnosisCHD,,CHD,1.024,0.982,1.067
+diagnosis,diagnosisUA,,UA,1.021,0.97,1.075
+diagnosis,diagnosisSTEMI,,STEMI,1.083,1.006,1.166
+diagnosis,diagnosisNSTEMI,,NSTEMI,1.298,1.238,1.36
+pci_6mo,pci_6moTRUE,,PCI,0.651,0.605,0.699
+cabg_6mo,cabg_6moTRUE,,CABG,0.516,0.469,0.566
+hx_mi,hx_miTRUE,,Previous MI,1.136,1.095,1.179
+long_nitrate,long_nitrateTRUE,,Nitrates,1.152,1.118,1.188
+smokstatus,smokstatusEx,ex,Smoking,1.11,1.065,1.157
+smokstatus,smokstatusCurrent,current,Smoking,1.315,1.245,1.389
+smokstatus_missing,smokstatus_missingTRUE,missing,Smoking,,,
+hypertension,hypertensionTRUE,,Hypertension,0.965,0.929,1.001
+diabetes_logical,diabetes_logicalTRUE,,Diabetes,1.203,1.16,1.248
+total_chol_6mo,total_chol_6mo,,Total cholesterol,1.012,0.983,1.042
+total_chol_6mo_missing,total_chol_6mo_missingTRUE,missing,Total cholesterol,,,
+hdl_6mo,hdl_6mo,mmol/L,HDL,1.006,0.987,1.025
+hdl_6mo_missing,hdl_6mo_missingTRUE,missing,HDL,,,
+heart_failure,heart_failureTRUE,,Heart failure,1.543,1.495,1.593
+pad,padTRUE,,PAD,1.286,1.234,1.34
+hx_af,hx_afTRUE,,Atrial fibrillation,1.28,1.236,1.326
+hx_stroke,hx_strokeTRUE,,Prior stroke,1.329,1.277,1.382
+hx_renal,hx_renalTRUE,,Chronic renal disease,1.116,1.058,1.178
+hx_copd,hx_copdTRUE,,COPD,1.15,1.114,1.187
+hx_cancer,hx_cancerTRUE,,Cancer,1.377,1.324,1.432
+hx_liver,hx_liverTRUE,,Chronic liver disease,1.631,1.443,1.842
+hx_depression,hx_depressionTRUE,,Depression,1.179,1.135,1.225
+hx_anxiety,hx_anxietyTRUE,,Anxiety,1.172,1.116,1.231
+pulse_6mo,pulse_6mo,beats/min,Heart rate,1.098,1.084,1.112
+pulse_6mo_missing,pulse_6mo_missingTRUE,missing,Heart rate,,,
+crea_6mo,crea_6mo,mmol/L,Creatinine,1.065,1.051,1.08
+crea_6mo_missing,crea_6mo_missingTRUE,missing,Creatinine,,,
+total_wbc_6mo,total_wbc_6mo,10^9/L,White cell count,1.12,1.106,1.135
+total_wbc_6mo_missing,total_wbc_6mo_missingTRUE,missing,White cell count,,,
+haemoglobin_6mo,haemoglobin_6mo,g/dL,Haemoglobin,0.758,0.724,0.794
+haemoglobin_6mo_missing,haemoglobin_6mo_missingTRUE,missing,Haemoglobin,,,
