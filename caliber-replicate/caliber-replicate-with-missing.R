@@ -1,3 +1,12 @@
+#+ knitr_setup, include = FALSE
+
+# Whether to cache the intensive code sections. Set to FALSE to recalculate
+# everything afresh.
+cacheoption <- TRUE
+# Disable lazy caching globally, because it fails for large objects, and all the
+# objects we wish to cache are large...
+opts_chunk$set(cache.lazy = FALSE)
+
 #' # Replicating Rapsomaniki _et al._ 2014 without imputation
 #' 
 #' Rapsomaniki and co-workers' paper creates a Cox hazard model to predict time
@@ -37,6 +46,11 @@ compare.coefficients.filename <-
   '../../output/caliber-replicate-with-missing-try1.csv'
 cox.var.imp.filename <-
   '../../output/caliber-replicate-with-missing-var-imp-try1.csv'
+model.filename <-
+  '../../output/caliber-replicate-with-missing-model.rds'
+
+bootstraps <- 200
+n.threads <- 8
 
 #' ## Setup
 
@@ -219,9 +233,12 @@ COHORT.surv.train <- Surv(
 #' ## Survival fitting
 #' 
 #' Fit a Cox model to the preprocessed data. The paper uses a Cox model with an
-#' exponential baseline hazard, as here.
+#' exponential baseline hazard, as here. The standard errors were calculated
+#' with 200 bootstrap samples, which we're also doing here.
 
-fit.exp <- survreg(
+#+ fit_cox_model, cache=cacheoption
+
+surv.formula <-
   COHORT.surv.train ~
     ### Sociodemographic characteristics #######################################
     ## Age in men, per year
@@ -295,24 +312,34 @@ fit.exp <- survreg(
     total_wbc_6mo_missing +
     ## Haemoglobin, per 1.5 g/dL increase
     haemoglobin_6mo +
-    haemoglobin_6mo_missing,
-  data = COHORT.scaled.demissed[-test.set, ],
-  dist = "exponential"
-)
+    haemoglobin_6mo_missing
+
+fit.exp.boot <- 
+  boot(
+    formula = surv.formula,
+    data = COHORT.scaled.demissed[-test.set, ],
+    statistic = bootstrapFitSurvreg,
+    R = bootstraps,
+    parallel = 'multicore',
+    ncpus = n.threads,
+    test.data = COHORT.scaled.demissed[test.set, ]
+  )
+
+# Save the fit, because it might've taken a while!
+saveRDS(fit.exp.boot, model.filename)
+
+fit.exp.boot.ests <-  bootStats(fit.exp.boot)
 
 #' ## Performance
 #' 
-#' Having fitted the Cox model, how did we do?
+#' Having fitted the Cox model, how did we do? The c-indices were calculated as
+#' part of the bootstrapping, so we just need to take a look at those...
 #' 
-
-# Calculate C-indices on training and test sets
-c.index.train <-
-  cIndex(fit.exp, COHORT.scaled.demissed[-test.set, ], model.type = 'survreg')
-c.index.test <- 
-  cIndex(fit.exp, COHORT.scaled.demissed[test.set, ], model.type = 'survreg')
-
-#' C-indices are **`r round(c.index.train, 3)`** on the training set and
-#' **`r round(c.index.test, 3)`** on the test set. Not too bad!
+#' C-indices are **`r round(fit.exp.boot.ests['c.train', 'val'], 3)` +/-
+#' `r round(fit.exp.boot.ests['c.train', 'err'], 3)`** on the training set and
+#' **`r round(fit.exp.boot.ests['c.test', 'val'], 3)` +/-
+#' `r round(fit.exp.boot.ests['c.test', 'err'], 3)`** on the test set.
+#' Not too bad!
 #' 
 #' 
 #' ## Coefficients
@@ -325,9 +352,8 @@ c.index.test <-
 old.coefficients <- read.csv(old.coefficients.filename)
 
 # Get coefficients from this fit
-new.coefficients <- as.data.frame(-fit.exp$coeff)
-names(new.coefficients) <- 'our_value'
-new.coefficients$our_value <- exp(new.coefficients$our_value)
+new.coefficients <-  bootStats(fit.exp.boot, negExp)
+names(new.coefficients) <- c('our_value', 'our_err')
 new.coefficients$quantity.level <- rownames(new.coefficients)
 
 # Create a data frame comparing them
@@ -354,6 +380,8 @@ ggplot(compare.coefficients, aes(x = their_value, y = our_value)) +
   geom_hline(yintercept = 1, colour = 'grey') +
   geom_vline(xintercept = 1, colour = 'grey') +
   geom_point() +
+  geom_errorbar(aes(ymin = our_value - our_err, ymax = our_value + our_err)) +
+  geom_errorbarh(aes(xmin = their_lower, xmax = their_upper)) +
   geom_text_repel(aes(label = long_name)) +
   theme_classic(base_size = 8)
 
