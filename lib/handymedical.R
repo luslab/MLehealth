@@ -47,9 +47,7 @@ readMedicalData <- function(filenames, col.keep, col.class) {
   df
 }
 
-binByQuantile <- function(x, probs, duplicate.discard = TRUE) {
-  # discretises data by binning a vector of values x into quantile-based bins
-  # defined by probs
+getQuantiles <- function(x, probs, duplicate.discard = TRUE) {
   breaks <- quantile(x, probs, na.rm = TRUE)
   if(duplicate.discard) {
     breaks <- unique(breaks)
@@ -59,6 +57,13 @@ binByQuantile <- function(x, probs, duplicate.discard = TRUE) {
       'Please choose different quantiles to split at.'
     )
   }
+  breaks
+}
+
+binByQuantile <- function(x, probs, duplicate.discard = TRUE) {
+  # discretises data by binning a vector of values x into quantile-based bins
+  # defined by probs
+  breaks <- getQuantiles(x, probs, duplicate.discard = duplicate.discard)
   factorNAfix(
     cut(
       x,
