@@ -11,15 +11,18 @@ cohort.file <- '../../../data/cohort-sanitised.csv'
 # training set)
 test.fraction <- 1/3
 
-# Column names of variables to use for predictions
-surv.predict <- c(
-  'age', 'gender', 'most_deprived', 'diagnosis', 'pci_6mo', 'cabg_6mo', 'hx_mi',
-  'long_nitrate', 'smokstatus', 'hypertension', 'diabetes', 'total_chol_6mo',
-  'hdl_6mo', 'heart_failure', 'pad', 'hx_af', 'hx_stroke', 'hx_renal',
-  'hx_copd', 'hx_cancer', 'hx_liver', 'hx_depression', 'hx_anxiety',
-  'pulse_6mo', 'crea_6mo', 'total_wbc_6mo','haemoglobin_6mo',
-  'most_deprived'
-)
+# If surv.predict wasn't already specified, use the defaults...
+if(!exists('surv.predict')) {
+  # Column names of variables to use for predictions
+  surv.predict <- c(
+    'age', 'gender', 'most_deprived', 'diagnosis', 'pci_6mo', 'cabg_6mo',
+    'hx_mi', 'long_nitrate', 'smokstatus', 'hypertension', 'diabetes',
+    'total_chol_6mo', 'hdl_6mo', 'heart_failure', 'pad', 'hx_af', 'hx_stroke',
+    'hx_renal', 'hx_copd', 'hx_cancer', 'hx_liver', 'hx_depression',
+    'hx_anxiety', 'pulse_6mo', 'crea_6mo', 'total_wbc_6mo','haemoglobin_6mo',
+    'most_deprived'
+  )
+}
 
 cols.keep <- c(surv.predict, 'exclude', 'imd_score')
 
