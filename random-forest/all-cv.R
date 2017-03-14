@@ -33,6 +33,11 @@ cv.n.folds <- 3
 n.calibrations <- 100
 n.data <- 30000 # This is of full dataset...further rows may be excluded in prep
 
+# If surv.vars is defined as a character vector here, the model only uses those
+# variables specified, eg c('age') would build a model purely based on age. If
+# not specified (ie commented out), it will use the defaults.
+# surv.predict <- c('age')
+
 continuous.vars <-
   c(
     'age', 'total_chol_6mo', 'hdl_6mo', 'pulse_6mo', 'crea_6mo',
