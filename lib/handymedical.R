@@ -340,7 +340,15 @@ calcCoxCIndex <- function(model.fit, df) {
   )
 }
 
-cIndex <- function(model.fit, df, model.type = 'cph', risk.time = 5) {
+cIndex <- function(model.fit, df, model.type = 'cph', risk.time = 5,
+                   tod.round = 0.1) {
+  if(model.type == 'rfsrc') {
+    # rfsrc throws an error unless the y-values in the provided data are
+    # identical to those used to train the model, so recreate the rounded ones..
+    df$surv_time_round <-
+      round_any(df$surv_time, tod.round)
+  }
+  
   # Calculate the C-index for a Cox proportional hazards model on data in df
   predictions <- predict(model.fit, df)
   # If we're dealing with a ranger model, then we need to get a proxy for risk
@@ -364,31 +372,56 @@ cIndex <- function(model.fit, df, model.type = 'cph', risk.time = 5) {
   )
 }
 
-cphCoeffs <- function(cph.model, df) {
-  # Get the survival variables from the coefficients in the model, which are
-  # recorded as variable=level.
-  # The data frame is needed to provide the baseline levels, which don't seem to
-  # be stored in the Cox model object...
-  surv.vars <-
-    unique(sapply(strsplit(names(cph.model$coefficients), '='), firstElement))
-  # get all the possible levels by looking through the data for the levels of each
-  # variable identified above
-  surv.vars.levels <-
-    sapply(surv.vars, function(x){levels(df[,x])})
-  # create a data frame to populate with the beta values
-  surv.vars.df <- data.frame(
-    var   = rep(surv.vars, sapply(surv.vars.levels, length)),
-    level = unlist(surv.vars.levels),
-    beta  = 0 # betas are zero for all baselines, so make that the default value
-  )
+modelFactorLevelName <- function(factor.name, level.name, model.type) {
+  if(model.type == 'cph') {
+    # factor=Level
+    return(paste0(factor.name, '=', level.name))
+  } else if(model.type == 'survreg') {
+    # factorLevel
+    return(paste0(factor.name, level.name))
+  }
+}
+
+cphCoeffs <- function(cph.model, df, surv.predict, model.type = 'cph') {
+  # Depending on the model type, get a vector of the Cox coefficient names...
+  if(model.type == 'cph') {
+    coeff.names <- names(cph.model$coefficients)
+    coeff.vals  <- cph.model$coefficients
+  } else {
+    # Otherwise, it will come as a data frame of some kind
+    coeff.names <- rownames(cph.model)
+    coeff.vals  <- cph.model$val
+    coeff.errs  <- cph.model$err
+  }
+  
+  # Get the names and levels from each of the factors used to create the
+  # survival model. Models by cph are good enough to separate with = (ie 
+  # factor=level), but this is not universal so it's a more general solution to
+  # create these coefficient names from the data in a per-model-type way.
+  surv.vars.levels <- sapply(surv.predict, function(x){levels(df[,x])})
+  surv.vars.df <- 
+    data.frame(
+      var   = rep(surv.predict, unlist(sapply(surv.vars.levels, length))),
+      level = unlist(surv.vars.levels),
+      val   = 0, # betas are zero for all baselines so make that the default val
+      err   = 0, # uncertainty is zero for a baseline too!
+      stringsAsFactors = FALSE
+    )
   # go through each coefficient in the survival fit...
-  for(i in 1:length(cph.model$coefficients)) {
-    # ...extract the variable name and level...
-    needle <- strsplit(names(cph.model$coefficients[i]), '=')[[1]]
-    surv.vars.df[
-      # choose the beta value of the variable at that level
-      surv.vars.df$var == needle[1] & surv.vars.df$level == needle[2], 'beta'
-      ] <- cph.model$coefficients[i] # and set it to the relevant coefficient
+  for(i in 1:nrow(surv.vars.df)) {
+    # ...create the factor/level coefficient name...
+    needle <-
+      modelFactorLevelName(
+        surv.vars.df[i, 'var'], surv.vars.df[i, 'level'],
+        model.type
+      )
+    # ...find where in the coefficients that name occurs...
+    if(sum(coeff.names == needle) > 0) {
+      needle.i <- which(coeff.names == needle)
+      # ...and set the relevant value and error
+      surv.vars.df[i, 'val'] <- coeff.vals[needle.i]
+      surv.vars.df[i, 'err'] <- coeff.errs[needle.i]
+    }
   }
   surv.vars.df
 }
@@ -534,8 +567,7 @@ survivalFit <- function(
         statistic = bootstrapFit,
         fit.fun = survreg,
         R = bootstraps,
-        dist = 'exponential',
-        ...
+        dist = 'exponential'
       )
     )
   } else if(model.type == 'ranger') {
@@ -550,13 +582,70 @@ survivalFit <- function(
       )
     )
   } else if(model.type == 'rfsrc') {
+    # rfsrc, if you installed it correctly, controls threading by changing an
+    # environment variable
+    options(rf.cores = n.threads)
+    
+    # Fit and return
     return(
       rfsrc(
         surv.formula,
         df,
-        ntree = n.trees
+        ntree = n.trees,
+        ...
       )
     )
+  }
+}
+
+survivalBootstrap <- function(
+  predict.vars, df, df.test, model.type = 'survreg',
+  n.trees = 500, split.rule = 'logrank', n.threads = 1, tod.round = 0.1,
+  bootstraps = 200, ...
+) {
+  
+  # Depending on model.type, change the name of the variable for survival time
+  if(model.type %in% c('survreg')) {
+    # Cox models can use straight death time
+    surv.time = 'surv_time'
+  } else {
+    # Random forests need to use rounded death time
+    surv.time = 'surv_time_round'
+    
+    df$surv_time_round <-
+      round_any(df$surv_time, tod.round)
+  }
+  
+  # Create a survival formula with the provided variable names...
+  surv.formula <-
+    formula(
+      paste0(
+        # Survival object made in-formula
+        'Surv(', surv.time,', surv_event) ~ ',
+        # Predictor variables then make up the other side
+        paste(predict.vars, collapse = '+')
+      )
+    )
+  
+  # Then, perform the relevant type of fit depending on the model type requested 
+  if(model.type == 'cph') {
+    stop('model.type cph not yet implemented')
+  } else if(model.type == 'survreg') {
+    return(
+      boot(
+        formula = surv.formula,
+        data = df,
+        statistic = bootstrapFitSurvreg,
+        R = bootstraps,
+        parallel = 'multicore',
+        ncpus = n.threads,
+        test.data = df.test
+      )
+    )
+  } else if(model.type == 'ranger') {
+    stop('model.type ranger not yet implemented')
+  } else if(model.type == 'rfsrc') {
+    stop('model.type rfsrc not yet implemented')
   }
 }
 
