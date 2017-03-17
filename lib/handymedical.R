@@ -341,7 +341,7 @@ calcCoxCIndex <- function(model.fit, df) {
 }
 
 cIndex <- function(model.fit, df, model.type = 'cph', risk.time = 5,
-                   tod.round = 0.1) {
+                   tod.round = 0.1, ...) {
   if(model.type == 'rfsrc') {
     # rfsrc throws an error unless the y-values in the provided data are
     # identical to those used to train the model, so recreate the rounded ones..
@@ -350,7 +350,7 @@ cIndex <- function(model.fit, df, model.type = 'cph', risk.time = 5,
   }
   
   # Calculate the C-index for a Cox proportional hazards model on data in df
-  predictions <- predict(model.fit, df)
+  predictions <- predict(model.fit, df, ...)
   # If we're dealing with a ranger model, then we need to get a proxy for risk
   if(model.type == 'ranger') {
     risk.bin <- which.min(abs(predictions$unique.death.times - risk.time))
