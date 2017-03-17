@@ -43,11 +43,11 @@ endpoint <- 'death'
 
 old.coefficients.filename <- 'rapsomaniki-cox-values-from-paper.csv'
 compare.coefficients.filename <-
-  '../../output/caliber-replicate-with-missing-try1.csv'
+  '../../output/caliber-replicate-with-missing-survreg-bootstrap-1.csv'
 cox.var.imp.filename <-
-  '../../output/caliber-replicate-with-missing-var-imp-try1.csv'
+  '../../output/caliber-replicate-with-missing-survreg-bootstrap-var-imp-1.csv'
 model.filename <-
-  '../../output/caliber-replicate-with-missing-model.rds'
+  '../../output/caliber-replicate-with-missing-model-survreg-bootstrap-1.rds'
 
 bootstraps <- 200
 n.threads <- 8
@@ -634,8 +634,9 @@ ggplot(
 #'
 #+ missing_values_vs_ranges
 
-# Create a column for missing risk, initially empty
+# Create columns for missing risk, initially empty
 cox.var.imp$missing_risk <- NA
+cox.var.imp$missing_risk_err <- NA
 # Go through the rows of the data frame, looking for missing value risks...
 for(i in 1:nrow(cox.var.imp)) {
   # Does it have a missing value value?
@@ -644,11 +645,11 @@ for(i in 1:nrow(cox.var.imp)) {
     compare.coefficients$quantity.level
   ) {
     # If so, add it
-    cox.var.imp$missing_risk[i] <-
+    cox.var.imp[i, c('missing_risk', 'missing_risk_err')] <-
       compare.coefficients[
         compare.coefficients$quantity.level == 
           paste0(cox.var.imp$quantity[i], '_missingTRUE'),
-        'our_value'
+        c('our_value', 'our_err')
         ]
   }
 }
@@ -658,8 +659,14 @@ ggplot(
   subset(cox.var.imp, !is.na(cox.var.imp$missing_risk)),
   aes(x = quantity, y = missing_risk)
 ) +
-  geom_point() +
-  geom_errorbar(aes(ymin = min_risk, ymax = max_risk))
+  geom_point(color = 'red') +
+  geom_errorbar(
+    aes(
+      ymin = missing_risk - missing_risk_err,
+      ymax = missing_risk + missing_risk_err
+    ), width = 0.5, colour = 'red'
+  ) +
+  geom_errorbar(aes(ymin = min_risk, ymax = max_risk), width = 0.2)
 
 #' ## Conclusion
 #' 
