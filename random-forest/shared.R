@@ -15,7 +15,7 @@ test.fraction <- 1/3
 if(!exists('surv.predict')) {
   # Column names of variables to use for predictions
   surv.predict <- c(
-    'age', 'gender', 'most_deprived', 'diagnosis', 'pci_6mo', 'cabg_6mo',
+    'age', 'gender', 'diagnosis', 'pci_6mo', 'cabg_6mo',
     'hx_mi', 'long_nitrate', 'smokstatus', 'hypertension', 'diabetes',
     'total_chol_6mo', 'hdl_6mo', 'heart_failure', 'pad', 'hx_af', 'hx_stroke',
     'hx_renal', 'hx_copd', 'hx_cancer', 'hx_liver', 'hx_depression',
