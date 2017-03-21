@@ -9,10 +9,11 @@ opts_chunk$set(cache.lazy = FALSE)
 
 #' # Simple data investigations
 #' 
+#+ setup, message=FALSE
 
 data.filename <- '../../data/cohort-sanitised.csv'
 
-source('shared.R')
+source('../random-forest/shared.R')
 
 COHORT.full <- data.frame(fread(data.filename))
 
