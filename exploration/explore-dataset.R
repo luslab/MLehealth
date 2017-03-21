@@ -45,6 +45,34 @@ ggplot(subset(missingness, n.missing > 0), aes(x = var, y = pc.missing)) +
   geom_bar(stat = 'identity') +
   ggtitle('% missingness by variable')
 
+#' Are any variables commonly found to be jointly missing?
+#' 
+#+ missing_jointly_plot
+
+COHORT.missing <-
+  data.frame(
+    lapply(COHORT.use[, interesting.vars], function(x){is.na(x)})
+  )
+
+COHORT.missing.cor <- data.frame(
+  t(combn(1:ncol(COHORT.missing), 2)),
+  var1 = NA, var2 = NA, joint.missing = NA
+)
+
+for(i in 1:nrow(COHORT.missing.cor)) {
+  var1 <- sort(names(COHORT.missing))[COHORT.missing.cor[i, 'X1']]
+  var2 <- sort(names(COHORT.missing))[COHORT.missing.cor[i, 'X2']]
+  COHORT.missing.cor[i, c('var1', 'var2')] <- c(var1, var2)
+  if(any(COHORT.missing[, var1]) & any(COHORT.missing[, var2])) {
+    COHORT.missing.cor[i, 'joint.missing'] <-
+      sum(!(COHORT.missing[, var1]) & !(COHORT.missing[, var2])) / 
+      sum(!(COHORT.missing[, var1]) | !(COHORT.missing[, var2]))
+  }
+}
+
+ggplot(subset(COHORT.missing.cor, !is.na(joint.missing)), aes(x = var1, y = var2, fill = joint.missing)) +
+  geom_tile()
+
 #' ## Data distributions
 #' 
 #' How are the data distributed?
@@ -61,10 +89,11 @@ ggplot(COHORT.full) +
 #' misrecorded somehow.
 
 ggplot(COHORT.full) +
-  geom_histogram(aes(x = pulse_6mo, fill = pulse_6mo %% 10 != 0), binwidth = 1)+
+  geom_histogram(aes(x = pulse_6mo, fill = pulse_6mo %% 4 != 0), binwidth = 1) +
   xlim(0, 150)
 
 #' Heart rate data have high missingness, and those few values we do have are
-#' very heavily biased towards even numbers. The two most common values by some
-#' margin ae 60 and 80, though strangely 50, 70 and 90 are not similarly
-#' exceptional. There are also significant excesses at 100 and especially 120!
+#' very heavily biased towards multiples of 4. This is likely because heart rate
+#' is commonly measured for 15 seconds and then multiplied up to give a result
+#' in beats per minute! There is also a bias towards round numbers, with large
+#' peaks at 60, 80, 100 and 120...
