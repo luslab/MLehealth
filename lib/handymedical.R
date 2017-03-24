@@ -108,6 +108,17 @@ missingToBig <- function(x) {
   NA2val(x, really.big.value)
 }
 
+prepSurvCol <- function(df, col.time, col.event, event.yes) {
+  # Rename the survival time column
+  names(df)[names(df) == col.time] <- 'surv_time'
+  # Create a column denoting censorship or otherwise of events
+  df$surv_event <- df[, col.event] %in% event.yes
+  # Remove the event column so we don't use it as a covariate later
+  df[, col.event] <- NULL
+  
+  df
+}
+
 prepData <- function(
   # surv.event cannot be 'surv_event' or will break later!
   # The fraction of the data to use as the test set (1 - this will be used as
@@ -187,12 +198,8 @@ prepData <- function(
     }
   }
   
-  # Rename the survival time column
-  names(df)[names(df) == col.time] <- 'surv_time'
-  # Create a column denoting censorship or otherwise of events
-  df$surv_event <- df[, col.event] %in% event.yes
-  # Remove the event column so we don't use it as a covariate later
-  df[, col.event] <- NULL
+  # Sort out the time to event and event class columns
+  df <- prepSurvCol(df, col.time, col.event, event.yes)
   
   # If there's any more preprocessing to do, do it now!
   if(!is.null(extra.fun)) {
