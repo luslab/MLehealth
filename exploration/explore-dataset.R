@@ -14,6 +14,7 @@ opts_chunk$set(cache.lazy = FALSE)
 data.filename <- '../../data/cohort-sanitised.csv'
 
 source('../random-forest/shared.R')
+require(rms)
 
 COHORT.full <- data.frame(fread(data.filename))
 
@@ -73,6 +74,50 @@ for(i in 1:nrow(COHORT.missing.cor)) {
 
 ggplot(subset(COHORT.missing.cor, !is.na(joint.missing)), aes(x = var1, y = var2, fill = joint.missing)) +
   geom_tile()
+
+#' ### Survival and missingness
+#' 
+#' Let's plot survival curves for a few types of data by missingness...
+#' 
+#+ missingness_survival
+
+COHORT.use$surv <- with(COHORT.use, Surv(time_death, endpoint_death == 'Death'))
+
+plotSurvSummary <- function(df, var) {
+  df$var_summary <- factorNAfix(binByQuantile(df[, var], c(0,0.1,0.9,1)))
+  surv.curve <- npsurv(surv ~ var_summary, data = df)
+  print(survplot(surv.curve, ylab = var))
+}
+
+plotSurvSummary(COHORT.use, 'total_wbc_6mo')
+
+surv.curve <- npsurv(surv ~ is.na(crea_6mo), data = COHORT.use)
+survplot(surv.curve)
+
+surv.curve <- npsurv(surv ~ is.na(haemoglobin_6mo), data = COHORT.use)
+survplot(surv.curve)
+
+surv.curve <- npsurv(surv ~ is.na(hdl_6mo), data = COHORT.use)
+survplot(surv.curve)
+
+surv.curve <- npsurv(surv ~ is.na(pulse_6mo), data = COHORT.use)
+survplot(surv.curve)
+
+surv.curve <- npsurv(surv ~ is.na(smokstatus), data = COHORT.use)
+survplot(surv.curve)
+
+surv.curve <- npsurv(surv ~ is.na(total_chol_6mo), data = COHORT.use)
+survplot(surv.curve)
+
+surv.curve <- npsurv(surv ~ is.na(total_wbc_6mo), data = COHORT.use)
+survplot(surv.curve)
+
+#' Variables where it's safer to be missing data:
+#'  * Creatinine
+#'  * 
+#' 
+#' Variables where it's safer to have data:
+#'  * 
 
 #' ## Data distributions
 #' 
