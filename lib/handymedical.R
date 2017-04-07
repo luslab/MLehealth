@@ -379,6 +379,31 @@ cIndex <- function(model.fit, df, model.type = 'cph', risk.time = 5,
   )
 }
 
+generalVarImp <- function(model.fit, df, model.type = 'cph', risk.time = 5,
+                          tod.round = 0.1, ...) {
+  baseline.c.index <- cIndex(model.fit, df, model.type, risk.time, tod.round,
+                             ...)
+  
+  var.imp <- data.frame(
+     var = names(df), # need to somehow exclude outcome vars
+     var.imp = NA,
+     stringsAsFactors = FALSE
+  )
+  for(i in 1:nrow(var.imp)) { 
+    # Make a new, temporary data frame
+    df2 <- df
+    # Permute values of the sample in question
+    df2[, var.imp[i, 'var']] <- sample(df[, var.imp[i, 'var']], replace = TRUE)
+    # Calculate the C-index based on the permuted data
+    var.c.index <- cIndex(model.fit, df2, model.type, risk.time, tod.round,
+                          ...)
+    var.imp[i, 'var.imp'] <- baseline.c.index - var.c.index
+  }
+  
+  # Return the data frame of variable importances
+  var.imp
+}
+
 modelFactorLevelName <- function(factor.name, level.name, model.type) {
   if(model.type == 'cph') {
     # factor=Level
