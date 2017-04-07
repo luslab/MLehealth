@@ -14,7 +14,7 @@ opts_chunk$set(cache.lazy = FALSE)
 data.filename <- '../../data/cohort-sanitised.csv'
 
 source('../random-forest/shared.R')
-require(rms)
+requirePlus('rms')
 
 COHORT.full <- data.frame(fread(data.filename))
 
@@ -74,6 +74,45 @@ for(i in 1:nrow(COHORT.missing.cor)) {
 
 ggplot(subset(COHORT.missing.cor, !is.na(joint.missing)), aes(x = var1, y = var2, fill = joint.missing)) +
   geom_tile()
+
+#' Some tests are usually ordered together. Are they missing together?
+#' 
+#+ missing_venn
+
+ggplot(
+  data.frame(
+    x = 1,
+    category = factor(c('HDL', 'both', 'total cholesterol', 'neither'),
+                      levels = c('HDL', 'both', 'total cholesterol', 'neither')),
+    val = c(
+      sum(!COHORT.missing$hdl_6mo) - sum(!COHORT.missing$hdl_6mo & !COHORT.missing$total_chol_6mo),
+      sum(!COHORT.missing$hdl_6mo & !COHORT.missing$total_chol_6mo),
+      sum(!COHORT.missing$total_chol_6mo) - sum(!COHORT.missing$hdl_6mo & !COHORT.missing$total_chol_6mo),
+      sum(COHORT.missing$hdl_6mo & COHORT.missing$total_chol_6mo)
+    )
+  ),
+  aes(x = x, y = val, fill = category)
+) +
+  geom_bar(stat='identity') +
+  scale_fill_manual(values=c("#cc0000", "#990099", "#0000cc", '#cccccc'))
+
+ggplot(
+  data.frame(
+    x = 1,
+    category = factor(c('haemoglobin', 'both', 'WBC', 'neither'),
+                      levels = c('haemoglobin', 'both', 'WBC', 'neither')),
+    val = c(
+      sum(!COHORT.missing$haemoglobin_6mo) - sum(!COHORT.missing$haemoglobin_6mo & !COHORT.missing$total_wbc_6mo),
+      sum(!COHORT.missing$haemoglobin_6mo & !COHORT.missing$total_wbc_6mo),
+      sum(!COHORT.missing$total_wbc_6mo) - sum(!COHORT.missing$haemoglobin_6mo & !COHORT.missing$total_wbc_6mo),
+      sum(COHORT.missing$hdl_6mo & COHORT.missing$total_wbc_6mo)
+    )
+  ),
+  aes(x = x, y = val, fill = category)
+) +
+  geom_bar(stat='identity') +
+  scale_fill_manual(values=c("#cc0000", "#990099", "#0000cc", '#cccccc'))
+  
 
 #' ### Survival and missingness
 #' 
