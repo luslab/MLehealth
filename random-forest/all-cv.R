@@ -15,6 +15,8 @@ data.filename <- '../../data/cohort-sanitised.csv'
 calibration.filename <- '../../output/all-cv-rf-try1.csv'
 comparison.filename <-
   '../../output/caliber-replicate-with-missing-var-imp-try1.csv'
+comparison.filename.perm <-
+  '../../output/caliber-replicate-with-missing-survreg-bootstrap-var-imp-perm-1.csv'
 output.filename <- '../../output/all-cv-rf-var-imp-try1.csv'
 
 # What kind of model to fit to...currently 'cph' (Cox model), 'ranger' or
@@ -356,6 +358,39 @@ if(model.type == 'cph') {
     # Log both...old coefficients for linearity, importance to shrink range!
     scale_x_log10() +
     scale_y_log10()
+  )
+  
+  print(cor(var.imp[, c('var.imp', 'our_range')], method = 'spearman'))
+  
+  # Do the same again with the permuted version
+  
+  # First, load data from Cox modelling for comparison
+  cox.var.imp <- read.csv(comparison.filename.perm)
+  
+  # Rename the var.imp column to avoid confusion
+  names(cox.var.imp) <- c('quantity', 'cox.var.imp')
+  
+  # Then, get the variable importance from the model just fitted
+  var.imp <-
+    data.frame(
+      var.imp = importance(surv.model.fit)/max(importance(surv.model.fit))
+    )
+  var.imp$quantity <- rownames(var.imp)
+  
+  var.imp <- merge(var.imp, cox.var.imp)
+  
+  # Save the results as a CSV
+  write.csv(var.imp, output.filename)
+  
+  #' ## Variable importance vs Cox model replication variable importance
+  
+  print(
+    ggplot(var.imp, aes(x = cox.var.imp, y = var.imp)) +
+      geom_point() +
+      geom_text_repel(aes(label = quantity)) +
+      # Log both...old coefficients for linearity, importance to shrink range!
+      scale_x_log10() +
+      scale_y_log10()
   )
   
   print(cor(var.imp[, c('var.imp', 'our_range')], method = 'spearman'))

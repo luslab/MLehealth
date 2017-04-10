@@ -2,7 +2,7 @@
 
 # Whether to cache the intensive code sections. Set to FALSE to recalculate
 # everything afresh.
-cacheoption <- TRUE
+cacheoption <- FALSE
 # Disable lazy caching globally, because it fails for large objects, and all the
 # objects we wish to cache are large...
 opts_chunk$set(cache.lazy = FALSE)
@@ -46,11 +46,13 @@ compare.coefficients.filename <-
   '../../output/caliber-replicate-with-missing-survreg-bootstrap-1.csv'
 cox.var.imp.filename <-
   '../../output/caliber-replicate-with-missing-survreg-bootstrap-var-imp-1.csv'
+cox.var.imp.perm.filename <-
+  '../../output/caliber-replicate-with-missing-survreg-bootstrap-var-imp-perm-1.csv'
 model.filename <-
   '../../output/caliber-replicate-with-missing-model-survreg-bootstrap-1.rds'
 
-bootstraps <- 200
-n.threads <- 8
+bootstraps <- 10
+n.threads <- 3
 
 #' ## Setup
 
@@ -314,6 +316,14 @@ surv.formula <-
     haemoglobin_6mo +
     haemoglobin_6mo_missing
 
+# Fit the main model with all data
+fit.exp <- survreg(
+  formula = surv.formula,
+  data = COHORT.scaled.demissed[-test.set, ],
+  dist = "exponential"
+)
+
+# Run a bootstrap on the model to find uncertainties
 fit.exp.boot <- 
   boot(
     formula = surv.formula,
@@ -328,6 +338,7 @@ fit.exp.boot <-
 # Save the fit, because it might've taken a while!
 saveRDS(fit.exp.boot, model.filename)
 
+# Unpackage the uncertainties from the bootstrapped data
 fit.exp.boot.ests <-  bootStats(fit.exp.boot)
 
 #' ## Performance
@@ -406,7 +417,24 @@ print(
 #' 
 #' To establish how important a given variable is in determining outcome (and to
 #' compare with other measures such as variable importance with random forests),
-#' it's helpful to find the range of risks implied by the actual values of a
+#' it would be worthwhile to calculate an equivalent measure for a Cox model.
+#' Let's try two different ways: firstly, by permuting, in analogy with random
+#' forests, and secondly by taking the range of risks implied by the data.
+#' 
+#' #### Cox variable importance by permutation
+#' 
+#+ cox_variable_importance_permutation
+
+cox.var.imp.perm <- 
+  generalVarImp(
+    fit.exp, COHORT.scaled.demissed[test.set, ], model.type = 'survreg'
+  )
+
+write.csv(cox.var.imp.perm, cox.var.imp.perm.filename, row.names = FALSE)
+
+#' #### Cox variable importance by range
+#' 
+#' Let's find the range of risks implied by the actual values of a
 #' given variable in the data. Consequently, let's take the coefficients found,
 #' and multiply them by the approximate range of values found in the dataset,
 #' represented by the 10th and 90th percentiles to exclude outliers.
@@ -415,7 +443,7 @@ print(
 #' includes missing values, otherwise the large number of 0s can affect
 #' the percentiles.
 #'
-#+ cox_variable_importance
+#+ cox_variable_importance_range
 
 cox.var.imp <- data.frame()
 for(quantity in unique(compare.coefficients$quantity)) {
