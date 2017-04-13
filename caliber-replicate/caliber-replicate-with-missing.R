@@ -665,6 +665,7 @@ ggplot(
 # Create columns for missing risk, initially empty
 cox.var.imp$missing_risk <- NA
 cox.var.imp$missing_risk_err <- NA
+cox.var.imp$missing_n <- NA
 # Go through the rows of the data frame, looking for missing value risks...
 for(i in 1:nrow(cox.var.imp)) {
   # Does it have a missing value value?
@@ -679,6 +680,8 @@ for(i in 1:nrow(cox.var.imp)) {
           paste0(cox.var.imp$quantity[i], '_missingTRUE'),
         c('our_value', 'our_err')
         ]
+    cox.var.imp[i, 'missing_n'] <-
+      sum(COHORT.scaled.demissed[, paste0(cox.var.imp$quantity[i], '_missing')])
   }
 }
 
@@ -695,6 +698,84 @@ ggplot(
     ), width = 0.5, colour = 'red'
   ) +
   geom_errorbar(aes(ymin = min_risk, ymax = max_risk), width = 0.2)
+
+# Get those variables which have a missing risk
+risk.dist.by.var <- data.frame()
+# And also spoof a distribution of risks for missing values for plotting
+missing.dist.by.var <- data.frame()
+for(quantity in subset(cox.var.imp, !is.na(cox.var.imp$missing_risk))$quantity){
+  # Get risks by taking the scaled values (NOT processed for missing ones, or
+  # there will be a lot of 0s in there) and taking quantity risks to that power
+  risk <-
+    new.coefficients$our_value[new.coefficients$quantity.level == quantity] ^
+    COHORT.scaled[, quantity]
+  # Discard outliers with absurd values
+  risk <- risk[inRange(risk, quantile(risk, c(0.01, 0.99), na.rm = TRUE))]
+  
+  risk.dist.by.var <-
+    rbind(
+      risk.dist.by.var,
+      data.frame(quantity, risk)
+    )
+  
+  risk <- rnorm(
+    cox.var.imp$missing_n[cox.var.imp$quantity ==
+                                 quantity],
+    new.coefficients$our_value[new.coefficients$quantity.level ==
+                                 paste0(quantity, '_missingTRUE')],
+    new.coefficients$our_err[new.coefficients$quantity.level ==
+                                 paste0(quantity, '_missingTRUE')]
+  )
+  missing.dist.by.var <-
+    rbind(
+      missing.dist.by.var,
+      data.frame(quantity, risk)
+    )
+}
+
+
+width.missing <-
+  max(cox.var.imp$missing_n, na.rm = TRUE) / 
+    max(n.data - cox.var.imp$missing_n, na.rm = TRUE)
+
+
+ggplot() +
+  # First, and therefore at the bottom, draw the reference line at risk = 1
+  geom_hline(yintercept = 1) +
+  # Then, on top of that, draw the violin plot of the risk from the data
+  geom_violin(data = risk.dist.by.var, aes(x = quantity, y = risk), scale = 'count', width = 1/width.missing) +
+  geom_violin(data = missing.dist.by.var, aes(x = quantity, y = risk), scale = 'count', colour = 'red', width = 1)
+  
+  
+  
+  # Finally, draw some points and error bars for the missing data risks
+  geom_violin(
+    data = subset(cox.var.imp, !is.na(cox.var.imp$missing_risk)),
+    stat = 'identity',
+    aes(
+      x = quantity,
+      middle = missing_risk,
+      lower = missing_risk - missing_risk_err,
+      upper =  missing_risk + missing_risk_err,
+      ymin = missing_risk - 2*missing_risk_err,
+      ymax = missing_risk + 2*missing_risk_err,
+      size = missing_frac
+    ),
+    colour = 'red'
+  )
+  
+  
+  
+  geom_point(aes(size = missing_frac), color = 'red') +
+  geom_errorbar(
+    aes(
+      ymin = missing_risk - missing_risk_err,
+      ymax = missing_risk + missing_risk_err
+    ), width = 0.1, colour = 'red'
+  )
+  
+
+# More advanced violin plot of those values
 
 #' ## Conclusion
 #' 
