@@ -257,6 +257,44 @@ prepCoxMissing <- function(
   df
 }
 
+medianImpute <- function(df, missing.cols = NA) {
+  # If a list of columns which may contain missing data wasn't provided, then
+  # find those columns which do, in fact, contain missing data.
+  # (Check length == 1 or gives a warning if testing a vector.)
+  if(length(missing.cols) == 1) {
+    if(is.na(missing.cols)) {
+      missing.cols <- c()
+      for(col.name in names(df)) {
+        if(sum(is.na(df[, col.name])) > 0) {
+          missing.cols <- c(missing.cols, col.name)
+        }
+      }
+    }
+  }
+  
+  # Go through missing.cols, processing appropriately for data type
+  for(col.name in missing.cols) {
+    if(is.factor(df[, col.name])) {
+      # If it's a factor, replace with the most common level
+      df[, col.name] <-
+        NA2val(df[, col.name], val = modalLevel(df[, col.name]))
+      
+    } else {
+      # If it isn't a factor, replace with the median value
+      df[, col.name] <-
+        NA2val(df[, col.name], val = median(df[, col.name], na.rm = TRUE))
+    }
+  }
+  
+  df
+}
+
+modalLevel <- function(x) {
+  # Return the name of the most common level in a factor x
+  tt <- table(x)
+  names(tt[which.max(tt)])
+}
+
 plotConfusionMatrix <- function(truth, prediction, title = NA) {
   confusion.matrix <- table(truth, prediction)
   
