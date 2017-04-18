@@ -58,11 +58,11 @@ explodeByCol <- function(df, cols, sep=',', regex = NULL,
   # data frames fairly often come in with 'character' columns which are factors,
   # and these string-based functions can't handle that, so convert with a
   # warning
-  
+
   # instantiate a list to contain the exploded output
   exploded <- list()
   n.exploded <- list()
-  
+
   for(col in cols) {
     if(is.factor(df[, col])) {
       warning(
@@ -81,26 +81,26 @@ explodeByCol <- function(df, cols, sep=',', regex = NULL,
     # if regex is NULL, use the separator provided
     if(is.null(regex)) {
       exploded[col] <- list(strsplit(df[, col], sep, fixed = fixed))
-      # otherwise, use a regular expression to split the column
+    # otherwise, use a regular expression to split the column
     } else {
       exploded[col] <- list(regmatches(df[, col], gregexpr(regex, df[, col])))
     }
     # how many of each row should I create? ie 1,1,2,1,0
     n.exploded[[col]] <- sapply(exploded[[col]], length)
   }
-  
+
   # check the n.exploded values are the same for all columns
   if(!allSame(n.exploded)) {
     stop(
       paste0('The columns provided have inconsistent numbers of elements ',
-             'after exploding.'
+        'after exploding.'
+        )
       )
-    )
   }
   # turn the first element of n.exploded into a list of data frame row indices,
   # ie 1,2,3,3,4
   n.exploded.rows <- rep(1:length(n.exploded[[cols[1]]]), n.exploded[[cols[1]]])
-  
+
   # take the data frame and repeat rows the relevant number of times
   df <- df[n.exploded.rows, ]
   # fill its exploded column(s) with the appropriate values
@@ -137,7 +137,7 @@ pastePlus <- function(..., sep=" ", collapse = NULL, recycleZeroLength = TRUE) {
   #      If any of the passed objects has zero length, NULL; otherwise, the
   #      result of the paste function.
   if(!recycleZeroLength &
-     any(lapply(list(...), length) == 0)) {
+       any(lapply(list(...), length) == 0)) {
     return(NULL);
   }
   paste(..., sep = sep, collapse = collapse)
@@ -355,8 +355,9 @@ list.dirs <- function(path=".", pattern=NULL, all.dirs=FALSE,
   all[file.info(all)$isdir]
 }
 
-writeTablePlus <- function(data, filename, comment='', sep='\t',
-                           comment.char='#', col.names=NA,  ...) {
+writeTablePlus <- function(data, filename, comment = '', sep = '\t',
+                           comment.char = '#', row.names = FALSE, 
+                           col.names = TRUE, ...) {
   # A wrapper for the write.table function which adds a comment of your choice
   # at the top of the file.
   #
@@ -365,21 +366,24 @@ writeTablePlus <- function(data, filename, comment='', sep='\t',
   #      comment: The comment to be added at the top of the file.
   #          sep: The separator for the data, tab by default.
   # comment.char: The character denoting comments, # by default.
-  #    col.names: write.able argument. The NA default here ensures that the
-  #               header row is correctly offset given that the first column is
-  #               row names.
+  #    row.names: FALSE by default, because who wants row names?
+  #    col.names: TRUE by default, because everyone wants column names!
   #         ... : Allows arbitrary extra arguments relevant to write.table.
   #
   # Returns:
   #      Nothing!
+  
   f <- file(filename, open="wt") # open a connection to the file
   # if there's a comment, write that first
   if(nchar(comment) > 0) {
     # wrap the comment at 80 lines prefixed the comment character plus space
-    comment <- strwrap(comment, width=80, prefix=paste(comment.char,' ',sep=''))
+    comment <-
+      strwrap(comment, width = 80, prefix = paste(comment.char, ' ', sep = ''))
     writeLines(comment, f)
   }
-  write.table(data, f, sep=sep, col.names=col.names, ...)
+  write.table(
+    data, f, sep=sep, row.names = row.names, col.names = col.names, ...
+  )
   close(f)
 }
 
@@ -399,6 +403,43 @@ readTablePlus <- function(filename, sep='\t', comment.char='#', header=TRUE,
   }
 }
 
+readXlsxWriteTables <- function(filename, output.ext = 'tsv', sheet.names = NA,
+                                ...) {
+  # Write a multi-workbook xlsx file to a series of text files. Currently not
+  # that useful, as neither read.xlsx nor read.xlsx2 does a very good job of
+  # identifying column types, and you end up with a TSV composed of strings
+  #
+  # Args:
+  #  filename:    The name of the Excel file to read.
+  #   output.ext: The extension of the output file(s).
+  #  sheet.names: The names of the sheets to be written out. Default NA will
+  #               write all sheets which are present.
+  #         ... : Allows arbitrary extra arguments to writeTablePlus
+  
+  # Require the xlsx library - not loaded by default as it's not often needed
+  requirePlus('xlsx')
+  
+  # If no sheet names were provided...
+  if(is.na(sheet.names)) {
+    # ...get the sheet names by a few nested functions
+    sheet.names <- names(getSheets(loadWorkbook(filename)))
+  }
+  
+  base.filename <- justFilename(filename)
+  
+  # For the provided sheet names, go through and read them, and then write them
+  for(sheet.name in sheet.names) {
+    writeTablePlus(
+      # read.xlsx2 is faster, and also assumes tabular data with a header,
+      # probably the more likely use-case here
+      read.xlsx2(filename, sheetName = sheet.name),
+      # filename_sheetname.tsv
+      paste0(base.filename, '_', sheet.name, '.', output.ext),
+      ...
+    )
+  }
+}
+
 justFilename <- function(x) {
   # Returns filenames without extensions.
   #
@@ -412,7 +453,7 @@ justFilename <- function(x) {
   sapply(strsplit(basename(x),"\\."),
          function(x) paste(x[1:(length(x)-1)],
                            collapse=".")
-  )
+         )
 }
 
 fileExt <- function(x) {
@@ -428,7 +469,7 @@ fileExt <- function(x) {
   # split the strings by full stops, and only take the final element
   extensions <- sapply(strsplit(basename(x),"\\."),
                        function(x) tail(x, 1)
-  )
+                      )
   # where the extension is the same as the input filename, there is no extension
   extensions[extensions == x] <- ''
   
@@ -502,15 +543,15 @@ trirt <- function(x) {
 # Create a quantity by passing values or vectors to unum(x, dx), and then add,
 # subtract, multiply or divide with the functions below.
 unum <- function(x, dx) { data.frame(x=x, dx=dx) }
-# Calculates the triangular root of a number.
-#
-# Args:
-#       x: A number or vector of numbers.
-#      dx: A number or vector of numbers representing the uncertainty on x.
-#
-# Returns:
-#   A data frame with columns x and dx which can be used for further
-#   operations.
+  # Calculates the triangular root of a number.
+  #
+  # Args:
+  #       x: A number or vector of numbers.
+  #      dx: A number or vector of numbers representing the uncertainty on x.
+  #
+  # Returns:
+  #   A data frame with columns x and dx which can be used for further
+  #   operations.
 uadd <- function(a, b) {
   z <- a$x + b$x
   dz <- sqrt(a$dx^2 + b$dx^2)
@@ -552,22 +593,22 @@ normalise <- function(x, FUN = sum) {
 ################################################################################
 
 stdErr <- function(x) { sqrt(var(x)/length(x)) }
-# For a vector x, returns the standard error on the mean.
-#
-# Args:
-#      x: A vector.
-#
-# Returns:
-#      The standard error on the mean.
+  # For a vector x, returns the standard error on the mean.
+  #
+  # Args:
+  #      x: A vector.
+  #
+  # Returns:
+  #      The standard error on the mean.
 
 cv <- function(x) { sd(x)/mean(x) }
-# For a vector x, returns the coefficient of variation.
-#
-# Args:
-#      x: A vector.
-#
-# Returns:
-#      The coefficient of variation.
+  # For a vector x, returns the coefficient of variation.
+  #
+  # Args:
+  #      x: A vector.
+  #
+  # Returns:
+  #      The coefficient of variation.
 
 covar <- function(x) {
   # Wrapper function which returns the variance for a single-column vector and
@@ -657,66 +698,66 @@ firstElement <- function(x) {
 }
 
 permute <-
-  function(
-    # Randomly permute (some) elements of a vector or character string to create a
-    # (slightly) randomised version of it.
-    #
-    # Args:
-    x,
-    #       A vector or character string to have its contents permuted.
-    frac = 1.0,
-    #       The fraction of the contents to be permuted, from 0 (no permutation)
-    #       to 1 (permute everything).
-    n.permute = NA
-    #       The number of items to permute. Defaults to being calculated from frac
-    #       but can be specified manually too. Must be a multiple of 2, because
-    #       elements are swapped in pairs.
-    #
-    # Returns:
-    #       The vector or string with n.permute of its elements permuted.
-  ) {
-    # if frac is not a fraction, throw an error
-    if(frac < 0.0 | frac > 1.0) {
-      stop(paste0('frac = ', frac,'; it must be between 0 and 1.'))
-    } else if(!is.na(n.permute) & n.permute %% 2 != 0) {
-      stop(paste0('n.permute = ', n.permute,'; it must be divisible by 2.'))
-    }
-    
-    # if x is a character string, make it into a vector for processing and set a
-    # reminder to put it back as a string before returning
-    if(class(x) == 'character') {
-      x.is.string <- TRUE
-      x <- strsplit(x, '')[[1]]
-    } else {
-      x.is.string <- FALSE
-    }
-    
-    # if n.permute was not provided, we can now calculate it
-    if(is.na(n.permute)) {
-      n.permute <- round(length(x)*frac / 2) * 2 # make sure it's a multiple of 2!
-    }
-    
-    # if n.permute is longer than the vector...
-    if(n.permute > length(x)) {
-      stop(paste0('n.permute = ', n.permute,', which is greater than the length ',
-                  'of the string or vector provided, ', length(x)))
-    }
-    
-    # Create a random sample for pairs of positions to swap between
-    swapsies <- sample(1:length(x), n.permute)
-    
-    # take those swapping positions and move them around; reversing the indices in
-    # the second part of the function implies that position 1 will swap with
-    # position n, 2 with n-1, etc...
-    x <- replace(x, swapsies, x[rev(swapsies)])
-    
-    # if it was a string then reassemble it before returning
-    if(x.is.string) {
-      x <- paste(x, collapse='')
-    }
-    
-    x
+function(
+  # Randomly permute (some) elements of a vector or character string to create a
+  # (slightly) randomised version of it.
+  #
+  # Args:
+          x,
+  #       A vector or character string to have its contents permuted.
+          frac = 1.0,
+  #       The fraction of the contents to be permuted, from 0 (no permutation)
+  #       to 1 (permute everything).
+          n.permute = NA
+  #       The number of items to permute. Defaults to being calculated from frac
+  #       but can be specified manually too. Must be a multiple of 2, because
+  #       elements are swapped in pairs.
+  #
+  # Returns:
+  #       The vector or string with n.permute of its elements permuted.
+) {
+  # if frac is not a fraction, throw an error
+  if(frac < 0.0 | frac > 1.0) {
+    stop(paste0('frac = ', frac,'; it must be between 0 and 1.'))
+  } else if(!is.na(n.permute) & n.permute %% 2 != 0) {
+    stop(paste0('n.permute = ', n.permute,'; it must be divisible by 2.'))
   }
+      
+  # if x is a character string, make it into a vector for processing and set a
+  # reminder to put it back as a string before returning
+  if(class(x) == 'character') {
+    x.is.string <- TRUE
+    x <- strsplit(x, '')[[1]]
+  } else {
+    x.is.string <- FALSE
+  }
+  
+  # if n.permute was not provided, we can now calculate it
+  if(is.na(n.permute)) {
+    n.permute <- round(length(x)*frac / 2) * 2 # make sure it's a multiple of 2!
+  }
+  
+  # if n.permute is longer than the vector...
+  if(n.permute > length(x)) {
+    stop(paste0('n.permute = ', n.permute,', which is greater than the length ',
+                'of the string or vector provided, ', length(x)))
+  }
+  
+  # Create a random sample for pairs of positions to swap between
+  swapsies <- sample(1:length(x), n.permute)
+  
+  # take those swapping positions and move them around; reversing the indices in
+  # the second part of the function implies that position 1 will swap with
+  # position n, 2 with n-1, etc...
+  x <- replace(x, swapsies, x[rev(swapsies)])
+  
+  # if it was a string then reassemble it before returning
+  if(x.is.string) {
+    x <- paste(x, collapse='')
+  }
+  
+  x
+}
 
 requirePlus <- function(..., install = TRUE, quietly = TRUE) {
   # Simply require a number of packages in the same command, and install them if
@@ -729,7 +770,7 @@ requirePlus <- function(..., install = TRUE, quietly = TRUE) {
   #
   # Returns:
   #   Nothing (though warning and error messages are displayed on failure)
-  
+
   package.list <- c(...)
   # if the install parameter is true, install missing packages
   if(install) {
@@ -807,8 +848,8 @@ inRange <- function(x, rang, incl.end = rep(FALSE, length(rang))) {
   # find those which are bigger than the minimum value (including endpoint if
   # specified)...
   if(incl.end[i.min]){x >= rang[i.min]}else{x > rang[i.min]} &
-    # ...and those smaller than the max...
-    if(incl.end[i.max]){x <= rang[i.max]}else{x < rang[i.max]}
+  # ...and those smaller than the max...
+  if(incl.end[i.max]){x <= rang[i.max]}else{x < rang[i.max]}
   # ...and return it!
 }
 
@@ -832,7 +873,7 @@ logfileStart <- function(filename = default.logfile.name) {
 logfileCat <- function(...,
                        newline = TRUE, sep = "", fill = FALSE,
                        filename = logfileName
-) {
+                       ) {
   # Wrapper for adding an entry to a log file.
   #
   # Args:
@@ -923,11 +964,11 @@ getUserInputInteger <- function(s) {
   #   An integer.
   getUserInput(s,
                parse.fun = function(x){
-                 suppressWarnings(as.integer(x))
-               },
+                  suppressWarnings(as.integer(x))
+                 },
                validate.fun = function(x) {
-                 ifelse(!is.na(x), TRUE, FALSE)
-               },
+                  ifelse(!is.na(x), TRUE, FALSE)
+                 },
                e = 'Could not parse input as an integer.')
 }
 
@@ -962,4 +1003,59 @@ handyTimer <- function(t = NA, numeric = TRUE) {
   
   # Return t
   t
+}
+
+varName <- function(...) {
+  # Get the name of a variable as a string. Inspired by:
+  # http://stackoverflow.com/questions/14577412/
+  # Args:
+  #   x: A variable, eg myvar.
+  #
+  # Returns:
+  #   The name of the variable, eg 'myvar'.
+  
+  do.call(
+    function(x) { deparse(substitute(x)) },
+    ...
+      
+  )
+}
+
+varsToTable <- function(df, filename, index.cols = 1, ...) {
+  # Function to serialise variables for storage as a simple table in a text
+  # file. Takes a data frame df with columns (eg id1, id2, var1, var2) and, if
+  # a preexisting value is found with the same index.cols (eg c('id1', 'id2'),
+  # or 1:2 in this example), replaces the values (var1 and var2) or, if not,
+  # appends them, then writes the results to filename.
+  #
+  # TODO: Check that df has the same shape/column names(?) as the file.
+  # TODO: Check for repeated indices in the df provided.
+  #
+  # Args:
+  #   df:         A data frame of indices and values to store.
+  #   filename:   A file in which to store them.
+  #   index.cols: Which columns to use as indices, to find and replace existing
+  #               values with the same index.
+  #   ...:        Extra arguments for writeTablePlus.
+  #
+  # Returns:
+  #   Either the current time, or the time since t.
+  if(file.exists(filename)) {
+    vars.table <- readTablePlus(filename)
+    # First, append our data frame to the existing table
+    vars.table <- rbind(vars.table, df)
+
+    # Find the duplicate values of just the index columns, searching from the
+    # end because we want to keep the newer values we just rbind-ed in that
+    # case, and only keep unique ones.
+    vars.table <-
+      vars.table[!(duplicated(vars.table[, index.cols], fromLast = TRUE)), ]
+    
+  } else {
+    # If there's no existing file, just create a fresh data frame
+    vars.table <- df
+  }
+  
+  # Write the resulting data frame to a file of the given name
+  writeTablePlus(vars.table, filename, ...)
 }
