@@ -5,7 +5,10 @@
 random.seed <- 35498L
 
 # Specify the data file containing the patient cohort
-cohort.file <- '../../../data/cohort-sanitised.csv'
+data.filename <- '../../data/cohort-sanitised.csv'
+
+# Specify file to write performance characteristics to
+performance.file <- '../../output/models-performance.tsv'
 
 # The fraction of the data to use as the test set (1 - this will be used as the
 # training set)
