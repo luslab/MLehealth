@@ -760,20 +760,37 @@ bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
   )
 }
 
-bootStats <- function(bootfit, transform = identity) {
+bootStats <- function(bootfit, uncertainty = 'sd', transform = identity) {
   # Return a data frame with the statistics from a bootstrapped fit
   #
   # Args:
-  #    bootfit: A boot object.
-  #  transform: Optional transform for the statistics, defaults to identity, ie
-  #             leave the values as they are. Useful if you want the value and
-  #             variance of the exp(statistic), etc.
-  return(
-    data.frame(
-      val  = transform(bootfit$t0),
-      err  = sqrt(apply(transform(bootfit$t), 2, var))
+  #     bootfit: A boot object.
+  # uncertainty: Function to use for returning uncertainty, defaulting to 'sd'
+  #              which returns the standard deviation.
+  #   transform: Optional transform for the statistics, defaults to identity, ie
+  #              leave the values as they are. Useful if you want the value and
+  #              variance of the exp(statistic), etc.
+  #
+  
+  if(uncertainty == 'sd'){
+    return(
+      data.frame(
+        val  = transform(bootfit$t0),
+        err  = apply(transform(bootfit$t), 2, sd)
+      )
     )
-  )
+  } else if(uncertainty == '95ci') {
+    ci <- apply(transform(bootfit$t), 2, quantile, probs = c(0.025, 0.975))
+    return(
+      data.frame(
+        val  = transform(bootfit$t0),
+        lower = t(ci)[, 1],
+        upper = t(ci)[, 2]
+      )
+    )
+  } else {
+    stop("Unknown value '", uncertainty, "' for uncertainty parameter.")
+  }
 }
 
 negExp <- function(x) {
