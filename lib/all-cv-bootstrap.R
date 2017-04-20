@@ -2,7 +2,7 @@
 
 # Whether to cache the intensive code sections. Set to FALSE to recalculate
 # everything afresh.
-cacheoption <- TRUE
+cacheoption <- FALSE
 # Disable lazy caching globally, because it fails for large objects, and all the
 # objects we wish to cache are large...
 opts_chunk$set(cache.lazy = FALSE)
@@ -12,11 +12,11 @@ opts_chunk$set(cache.lazy = FALSE)
 #' 
 
 data.filename <- '../../data/cohort-sanitised.csv'
-calibration.filename <- '../../output/cph-crossvalidation-try1.csv'
+calibration.filename <- '../../output/survreg-crossvalidation-try1.csv'
 comparison.filename <-
   '../../output/caliber-replicate-with-missing-var-imp-try1.csv'
 # The first part of the filename for any output
-output.filename.base <- '../../output/all-cv-cph-boot-try1'
+output.filename.base <- '../../output/all-cv-survreg-boot-try1'
 
 # What kind of model to fit to...currently 'cph' (Cox model), 'ranger' or
 # 'rfsrc' (two implementations of random survival forests)
@@ -389,6 +389,7 @@ if(model.type == 'survreg') {
       )
     }
   }
+  print(cph.coeffs)
   
 
 } else {
