@@ -1,45 +1,16 @@
-#+ knitr_setup, include = FALSE
-
-# Whether to cache the intensive code sections. Set to FALSE to recalculate
-# everything afresh.
-cacheoption <- FALSE
-# Disable lazy caching globally, because it fails for large objects, and all the
-# objects we wish to cache are large...
-opts_chunk$set(cache.lazy = FALSE)
-
-#' # Cross-validating discretisation of input variables in a survival model
-#' 
-#' 
-
-data.filename <- '../../data/cohort-sanitised.csv'
-calibration.filename <- '../../output/survreg-crossvalidation-try1.csv'
-comparison.filename <-
-  '../../output/caliber-replicate-with-missing-var-imp-try1.csv'
-# The first part of the filename for any output
-output.filename.base <- '../../output/all-cv-survreg-boot-try1'
-
-# What kind of model to fit to...currently 'cph' (Cox model), 'ranger' or
-# 'rfsrc' (two implementations of random survival forests)
-model.type <- 'survreg'
-
 # All model types are bootstrapped this many times
-bootstraps <- 200
+bootstraps <- 10
 # n.trees is (obviously) only relevant for random forests
 n.trees <- 500
 # The following two variables are only relevant if the model.type is 'ranger'
 split.rule <- 'logrank'
-n.threads <- 8
+n.threads <- 3
 
 # Cross-validation variables
 input.n.bins <- 2:20
 cv.n.folds <- 3
 n.calibrations <- 100
 n.data <- 30000 # This is of full dataset...further rows may be excluded in prep
-
-# If surv.vars is defined as a character vector here, the model only uses those
-# variables specified, eg c('age') would build a model purely based on age. If
-# not specified (ie commented out), it will use the defaults.
-# surv.predict <- c('age')
 
 continuous.vars <-
   c(
@@ -183,6 +154,8 @@ if(!file.exists(calibration.filename)) {
   cv.performance <- read.csv(calibration.filename)
 }
 
+
+
 # Find the best calibration...
 # First, average performance across cross-validation folds
 cv.performance.average <-
@@ -257,7 +230,7 @@ if(model.type == 'ranger'){
 #' 
 #' This may take some time, so we'll cache it if possible...
 
-#+ fit_final_model, cache=cacheoption
+#+ fit_final_model
 
 # Fit to whole training set, calculating variable importance if appropriate
 surv.model.fit <-
@@ -277,149 +250,3 @@ saveRDS(surv.model.fit, paste0(output.filename.base, '-surv-model.rds'))
 
 # Get C-indices for training and test sets
 surv.model.fit.coeffs <-  bootStats(surv.model.fit)
-
-#' # Results
-#' 
-#' ## Performance
-#' 
-#' C-indices are **`r round(surv.model.fit.coeffs['c.train', 'val'], 3)` +/-
-#' `r round(surv.model.fit.coeffs['c.train', 'err'], 3)`** on the training set and
-#' **`r round(surv.model.fit.coeffs['c.test', 'val'], 3)` +/-
-#' `r round(surv.model.fit.coeffs['c.test', 'err'], 3)`** on the held-out test set.
-#' 
-#' ## Model fit
-#' 
-#+ resulting_fit
-
-print(surv.model.fit)
-
-#' ## Individual variables
-#' 
-#' How we examine individual variables will vary somewhat depending on the model
-#' type fitted. Let's take a look...
-
-if(model.type == 'survreg') {
-  #' ## Cox coefficients
-  #'
-  #+ cox_coefficients_plot
-  
-  cph.coeffs <-
-    cphCoeffs(
-      surv.model.fit.coeffs, COHORT.optimised, surv.predict,
-      model.type = model.type
-    )
-  
-  # Create columns to hold minimum and maximum values of bins
-  cph.coeffs$bin.min <- NA
-  cph.coeffs$bin.max <- NA
-  
-  for(variable in unique(cph.coeffs$var)) {
-    # If it's a continuous variable, get the real centres of the bins
-    if(variable %in% process.settings$var) {
-      process.i <- which(variable == process.settings$var)
-      
-      if(process.settings$method[[process.i]] == 'binByQuantile') {
-        
-        variable.quantiles <-
-          getQuantiles(
-            COHORT.use[, variable],
-            process.settings$settings[[process.i]]
-          )
-        # For those rows which relate to this variable, and whose level isn't
-        # missing, put in the appropriate quantile boundaries for plotting
-        cph.coeffs$bin.min[cph.coeffs$var == variable & 
-                             cph.coeffs$level != 'missing'] <-
-          variable.quantiles[1:(length(variable.quantiles) - 1)]
-        cph.coeffs$bin.max[cph.coeffs$var == variable & 
-                             cph.coeffs$level != 'missing'] <-
-          variable.quantiles[2:length(variable.quantiles)]
-      
-        # Now, plot this variable as a stepped line plot using those quantile
-        # boundaries
-        print(
-          ggplot(
-            subset(cph.coeffs, var == variable),
-            aes(x = bin.min, y = exp(-val))
-          ) +   
-            geom_step() +
-            geom_step(aes(y = exp(-(val-err))), colour = 'grey') +
-            geom_step(aes(y = exp(-(val+err))), colour = 'grey') +
-            geom_text(aes(label = bin.min), angle = 90, hjust = 0) +
-            # Missing value central estimate
-            geom_hline(
-              yintercept = exp(-cph.coeffs$val[cph.coeffs$var == variable & 
-                                              cph.coeffs$level == 'missing']),
-              colour = 'red'
-            ) +
-            # Missing value bounds
-            geom_hline(
-              yintercept = exp(-(cph.coeffs$val[cph.coeffs$var == variable & 
-                                                 cph.coeffs$level == 'missing'] +
-                                 -cph.coeffs$err[cph.coeffs$var == variable & 
-                                                    cph.coeffs$level == 'missing']
-                                 )),
-              colour = 'red'
-            ) +
-            geom_hline(
-              yintercept = exp(-(cph.coeffs$val[cph.coeffs$var == variable & 
-                                                  cph.coeffs$level == 'missing'] -
-                                   -cph.coeffs$err[cph.coeffs$var == variable & 
-                                                     cph.coeffs$level == 'missing']
-              )),
-              colour = 'red'
-            ) +
-            ggtitle(variable)
-        )
-      }
-    }  else {
-      # If there were no instructions, it's probably a normal factor, so plot it
-      # in the conventional way...
-      print(
-        ggplot(
-          subset(cph.coeffs, var == variable),
-          aes(x = factor(level), y = exp(-val))
-        ) +   
-          geom_bar(
-            width=0.9,
-            stat = "identity"
-          ) +
-          geom_errorbar(aes(ymin = exp(-(val + err)), ymax = exp(-(val - err)))) +
-          geom_text(aes(label = level), angle = 90, hjust = 0) +
-          ggtitle(variable)
-      )
-    }
-  }
-  print(cph.coeffs)
-  
-
-} else {
-  # For random forests, take a look at the variable importance
-  
-  # First, load data from Cox modelling for comparison
-  cox.var.imp <- read.csv(comparison.filename)
-  
-  # Then, get the variable importance from the model just fitted
-  var.imp <-
-    data.frame(
-      var.imp = importance(surv.model.fit)/max(importance(surv.model.fit))
-    )
-  var.imp$quantity <- rownames(var.imp)
-  
-  var.imp <- merge(var.imp, cox.var.imp)
-  
-  # Save the results as a CSV
-  write.csv(var.imp, paste0(output.filename, '-var-imp.csv'))
-
-  #' ## Variable importance vs Cox model replication variable importance
-  
-  print(
-  ggplot(var.imp, aes(x = our_range, y = var.imp)) +
-    geom_point() +
-    geom_text_repel(aes(label = quantity)) +
-    # Log both...old coefficients for linearity, importance to shrink range!
-    scale_x_log10() +
-    scale_y_log10()
-  )
-  
-  print(cor(var.imp[, c('var.imp', 'our_range')], method = 'spearman'))
-}
