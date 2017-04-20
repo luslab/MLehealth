@@ -50,8 +50,8 @@ cox.var.imp.perm.filename <-
 model.filename <-
   '../../output/caliber-replicate-with-missing-model-survreg-bootstrap-1.rds'
 
-bootstraps <- 10
-n.threads <- 3
+bootstraps <- 100
+n.threads <- 8
 
 #' ## Setup
 
@@ -433,12 +433,11 @@ print(
 #' To establish how important a given variable is in determining outcome (and to
 #' compare with other measures such as variable importance with random forests),
 #' it would be worthwhile to calculate an equivalent measure for a Cox model.
-#' Let's try two different ways: firstly, by permuting, in analogy with random
-#' forests, and secondly by taking the range of risks implied by the data.
+#' The easiest way to do this across techniques is to look at it by permutation:
+#' randomly permute values in each variable, and see how much worse it makes the
+#' prediction.
 #' 
-#' #### Cox variable importance by permutation
-#' 
-#+ cox_variable_importance_permutation
+#+ cox_variable_importance
 
 cox.var.imp.perm <- 
   generalVarImp(
@@ -446,82 +445,6 @@ cox.var.imp.perm <-
   )
 
 write.csv(cox.var.imp.perm, cox.var.imp.perm.filename, row.names = FALSE)
-
-#' #### Cox variable importance by range
-#' 
-#' Let's find the range of risks implied by the actual values of a
-#' given variable in the data. Consequently, let's take the coefficients found,
-#' and multiply them by the approximate range of values found in the dataset,
-#' represented by the 10th and 90th percentiles to exclude outliers.
-#' 
-#' Note that we've gone back to using the COHORT.scaled variable which still
-#' includes missing values, otherwise the large number of 0s can affect
-#' the percentiles.
-#'
-#+ cox_variable_importance_range
-
-cox.var.imp <- data.frame()
-for(quantity in unique(compare.coefficients$quantity)) {
-  # Ditch interactions, eg age:gender, because there's no column for them, and
-  # omit 'missing' signifiers too...
-  if(!grepl(':', quantity) & !grepl('missing', quantity)) {
-    # Set output variable to NA to catch errors
-    range.quantity <- NA
-    # Select rows from the data frame values which relate to this quantity
-    coeffs.quantity <-
-      compare.coefficients[
-        compare.coefficients$quantity == quantity,
-        'our_value'
-        ]
-    # If there's only one and it's not a factor...
-    if(length(coeffs.quantity) == 1 & !is.factor(COHORT.scaled[, quantity])) {
-      # If the variable is a logical, just use that value
-      if(is.logical(COHORT.scaled[, quantity])) {
-        range.quantity <- coeffs.quantity
-        max.quantity   <- max(1, coeffs.quantity)
-        min.quantity   <- min(1, coeffs.quantity)
-      # Otherwise, it must be a continuous variable, so we need to use the range
-      # of that variable to calculate its importance
-      } else {
-        # Get 10th and 90th percentiles
-        val.range <-
-          quantile(
-            COHORT.scaled[, quantity],
-            c(0.1, 0.9), na.rm = TRUE
-          )
-        range.risk <- coeffs.quantity ^ val.range
-        # Raise the risk to the power of that ratio to get the range of risks
-        range.quantity <- range.risk[1] / range.risk[2]
-        max.quantity   <- max(range.risk)
-        min.quantity   <- min(range.risk)
-      }
-    # Otherwise, it's a factor so take the extremes
-    } else {
-      # omitted value is 1, which could be the lowest risk category
-      coeffs.quantity <- c(coeffs.quantity, 1)
-      max.quantity   <- max(range.risk)
-      min.quantity   <- min(range.risk)
-      range.quantity <- max.quantity/min.quantity
-    }
-    # Finally, if it's less than 1, inverse it because magnitude is of interest
-    if(range.quantity < 1)
-      range.quantity <- 1/range.quantity
-    
-    cox.var.imp <-
-      rbind(
-        cox.var.imp,
-        data.frame(
-          quantity,
-          our_range = range.quantity,
-          max_risk = max.quantity,
-          min_risk = min.quantity
-        )
-      )
-  }
-}
-
-# Save CSV of results
-write.csv(cox.var.imp, cox.var.imp.filename, row.names = FALSE)
 
 #' ## Strange things about gender
 #' 
@@ -677,69 +600,65 @@ ggplot(
 #'
 #+ missing_values_vs_ranges
 
-# Create columns for missing risk, initially empty
-cox.var.imp$missing_risk <- NA
-cox.var.imp$missing_risk_lower <- NA
-cox.var.imp$missing_risk_upper <- NA
-cox.var.imp$missing_n <- NA
-# Go through the rows of the data frame, looking for missing value risks...
-for(i in 1:nrow(cox.var.imp)) {
-  # Does it have a missing value value?
-  if(
-    paste0(cox.var.imp$quantity[i], '_missingTRUE') %in% 
-    compare.coefficients$quantity.level
-  ) {
-    # If so, add it
-    cox.var.imp[
-      i,
-      c('missing_risk', 'missing_risk_lower', 'missing_risk_upper')] <-
-      compare.coefficients[
-        compare.coefficients$quantity.level == 
-          paste0(cox.var.imp$quantity[i], '_missingTRUE'),
-        c('our_value', 'our_lower', 'our_upper')
-        ]
-    cox.var.imp[i, 'missing_n'] <-
-      sum(COHORT.scaled.demissed[, paste0(cox.var.imp$quantity[i], '_missing')])
-  }
-}
-
-# Now, let's draw a graph of those values
-ggplot(
-  subset(cox.var.imp, !is.na(cox.var.imp$missing_risk)),
-  aes(x = quantity, y = missing_risk)
-) +
-  geom_point(color = 'red') +
-  geom_errorbar(
-    aes(
-      ymin = missing_risk_lower,
-      ymax = missing_risk_upper
-    ), width = 0.5, colour = 'red'
-  ) +
-  geom_errorbar(aes(ymin = min_risk, ymax = max_risk), width = 0.2)
-
-# Get those variables which have a missing risk
+# For continuous variables, get risk values for all patients for violin plots
 risk.dist.by.var <- data.frame()
-
-for(quantity in subset(cox.var.imp, !is.na(cox.var.imp$missing_risk))$quantity){
-  # Get risks by taking the scaled values (NOT processed for missing ones, or
-  # there will be a lot of 0s in there) and taking quantity risks to that power
-  risk <-
-    new.coefficients$our_value[new.coefficients$quantity.level == quantity] ^
-    COHORT.scaled[, quantity]
-  risk.high <-
-    (new.coefficients$our_value[new.coefficients$quantity.level == quantity] +
-       new.coefficients$our_err[new.coefficients$quantity.level == quantity])^
-    COHORT.scaled[, quantity]
-  # Discard outliers with absurd values
-  inliers <- inRange(risk, quantile(risk, c(0.01, 0.99), na.rm = TRUE))
-  risk <- risk[inliers]
-  risk.high <- risk.high[inliers]
-  
-  risk.dist.by.var <-
-    rbind(
-      risk.dist.by.var,
-      data.frame(quantity, risk, risk.high)
+# For categorical variables, let's get all levels of the factor
+risk.cats <- data.frame()
+# Quantities not to plot in this graph
+exclude.quantities <-
+  c(
+    'age', # too large a risk range, and no missing values anyway
+    'gender', 'diagnosis', # no missing values
+    'diabetes' # is converted to diabetes_logical so causes an error if included
     )
+
+for(quantity in surv.predict) {
+  # If we're not excluding..
+  if(!(quantity %in% exclude.quantities)) {
+    # If it's numeric
+    if(is.numeric(COHORT.scaled[, quantity])) {
+      # Get risks by taking the scaled values (NOT processed for missing ones, or
+      # there will be a lot of 0s in there) and taking quantity risks to that power
+      risk <-
+        new.coefficients$our_value[new.coefficients$quantity.level == quantity] ^
+        COHORT.scaled[, quantity]
+      # Discard outliers with absurd values
+      inliers <- inRange(risk, quantile(risk, c(0.01, 0.99), na.rm = TRUE))
+      risk <- risk[inliers]
+      risk.dist.by.var <-
+        rbind(
+          risk.dist.by.var,
+          data.frame(quantity, risk)
+        )
+      risk.cats <-
+        rbind(
+          risk.cats,
+          data.frame(
+            quantity,
+            new.coefficients[
+              new.coefficients$quantity.level ==
+                paste0(quantity, '_missingTRUE'),
+              ]
+          )
+        )
+    } else if(is.factor(COHORT.scaled[, quantity])) {
+      risk.cats <-
+        rbind(
+          risk.cats,
+          data.frame(
+            quantity,
+            new.coefficients[
+              startsWith(as.character(new.coefficients$quantity), quantity),
+            ]
+          )
+        )
+    } else {
+      # We're not going to include logicals in this plot, because they cannot
+      # be missing, by definition, in the logicals used here.
+      # There shouldn't be any other kinds of variables.
+      # If your code requires them, put something here.
+    }
+  }
 }
 
 ggplot() +
@@ -747,26 +666,21 @@ ggplot() +
   geom_hline(yintercept = 1) +
   # Then, on top of that, draw the violin plot of the risk from the data
   geom_violin(data = risk.dist.by.var, aes(x = quantity, y = risk)) +
-  geom_violin(data = risk.dist.by.var, aes(x = quantity, y = risk.high), colour = 'blue') +
-  geom_point(
-    data = subset(cox.var.imp, !is.na(cox.var.imp$missing_risk)),
-    aes(x = quantity, y = missing_risk), color = 'red'
+  geom_pointrange(
+    data = risk.cats,
+    aes(x = quantity, y = our_value, ymin = our_lower,
+        ymax = our_upper),
+    
+    position = position_jitter(width = 0.1)
   ) +
-  geom_errorbar(
-    data = subset(cox.var.imp, !is.na(cox.var.imp$missing_risk)),
+  geom_text(
+    data = risk.cats,
     aes(
       x = quantity,
-      ymin = missing_risk - missing_risk_err,
-      ymax = missing_risk + missing_risk_err
-    ), width = 0.1, colour = 'red'
+      y = our_value,
+      label = quantity.level
+    )
   )
-
-#' Blue is the risk distribution if the calculated risk value was one standard
-#' error higher than the central estimate...and it doesn't make a big difference
-#' so I'll ignore it in future commits.
-  
-
-# More advanced violin plot of those values
 
 #' ## Conclusion
 #' 
