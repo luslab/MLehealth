@@ -37,7 +37,6 @@ opts_chunk$set(cache.lazy = FALSE)
 
 #+ define_vars
 
-data.filename <- '../../data/cohort-sanitised.csv'
 n.data <- NA # This is of full dataset...further rows may be excluded in prep
 endpoint <- 'death'
 
@@ -241,7 +240,7 @@ COHORT.surv.train <- Surv(
 #+ fit_cox_model, cache=cacheoption
 
 surv.formula <-
-  COHORT.surv.train ~
+  Surv(surv_time, surv_event) ~
     ### Sociodemographic characteristics #######################################
     ## Age in men, per year
     ## Age in women, per year
@@ -263,7 +262,7 @@ surv.formula <-
     ## CABG in last 6 months, yes vs. no
     cabg_6mo +
     ## Previous/recurrent MI, yes vs. no
-    hx_mi +
+    #hx_mi +
     ## Use of nitrates, yes vs. no
     long_nitrate +
     ### CVD risk factors #######################################################
@@ -339,17 +338,32 @@ fit.exp.boot <-
 saveRDS(fit.exp.boot, model.filename)
 
 # Unpackage the uncertainties from the bootstrapped data
-fit.exp.boot.ests <-  bootStats(fit.exp.boot)
+fit.exp.boot.ests <-  bootStats(fit.exp.boot, uncertainty = '95ci')
+
+# Save bootstrapped performance values
+varsToTable(
+  data.frame(
+    model = 'cox',
+    imputation = FALSE,
+    discretised = FALSE,
+    c.index = fit.exp.boot.ests['c.train', 'val'],
+    c.index.lower = fit.exp.boot.ests['c.train', 'lower'],
+    c.index.upper = fit.exp.boot.ests['c.train', 'upper']
+  ),
+  performance.file
+)
 
 #' ## Performance
 #' 
 #' Having fitted the Cox model, how did we do? The c-indices were calculated as
 #' part of the bootstrapping, so we just need to take a look at those...
 #' 
-#' C-indices are **`r round(fit.exp.boot.ests['c.train', 'val'], 3)` +/-
-#' `r round(fit.exp.boot.ests['c.train', 'err'], 3)`** on the training set and
-#' **`r round(fit.exp.boot.ests['c.test', 'val'], 3)` +/-
-#' `r round(fit.exp.boot.ests['c.test', 'err'], 3)`** on the test set.
+#' C-indices are **`r round(fit.exp.boot.ests['c.train', 'val'], 3)`
+#' (`r round(fit.exp.boot.ests['c.train', 'lower'], 3)` - 
+#' `r round(fit.exp.boot.ests['c.train', 'upper'], 3)`)** on the training set and
+#' **`r round(fit.exp.boot.ests['c.test', 'val'], 3)`
+#' (`r round(fit.exp.boot.ests['c.test', 'lower'], 3)` - 
+#' `r round(fit.exp.boot.ests['c.test', 'upper'], 3)`)** on the test set.
 #' Not too bad!
 #' 
 #' 
@@ -363,8 +377,9 @@ fit.exp.boot.ests <-  bootStats(fit.exp.boot)
 old.coefficients <- read.csv(old.coefficients.filename)
 
 # Get coefficients from this fit
-new.coefficients <-  bootStats(fit.exp.boot, negExp)
-names(new.coefficients) <- c('our_value', 'our_err')
+new.coefficients <-
+  bootStats(fit.exp.boot, uncertainty = '95ci', transform = negExp)
+names(new.coefficients) <- c('our_value', 'our_lower', 'our_upper')
 new.coefficients$quantity.level <- rownames(new.coefficients)
 
 # Create a data frame comparing them
@@ -391,7 +406,7 @@ ggplot(compare.coefficients, aes(x = their_value, y = our_value)) +
   geom_hline(yintercept = 1, colour = 'grey') +
   geom_vline(xintercept = 1, colour = 'grey') +
   geom_point() +
-  geom_errorbar(aes(ymin = our_value - our_err, ymax = our_value + our_err)) +
+  geom_errorbar(aes(ymin = our_lower, ymax = our_upper)) +
   geom_errorbarh(aes(xmin = their_lower, xmax = their_upper)) +
   geom_text_repel(aes(label = long_name)) +
   theme_classic(base_size = 8)
@@ -664,7 +679,8 @@ ggplot(
 
 # Create columns for missing risk, initially empty
 cox.var.imp$missing_risk <- NA
-cox.var.imp$missing_risk_err <- NA
+cox.var.imp$missing_risk_lower <- NA
+cox.var.imp$missing_risk_upper <- NA
 cox.var.imp$missing_n <- NA
 # Go through the rows of the data frame, looking for missing value risks...
 for(i in 1:nrow(cox.var.imp)) {
@@ -674,11 +690,13 @@ for(i in 1:nrow(cox.var.imp)) {
     compare.coefficients$quantity.level
   ) {
     # If so, add it
-    cox.var.imp[i, c('missing_risk', 'missing_risk_err')] <-
+    cox.var.imp[
+      i,
+      c('missing_risk', 'missing_risk_lower', 'missing_risk_upper')] <-
       compare.coefficients[
         compare.coefficients$quantity.level == 
           paste0(cox.var.imp$quantity[i], '_missingTRUE'),
-        c('our_value', 'our_err')
+        c('our_value', 'our_lower', 'our_upper')
         ]
     cox.var.imp[i, 'missing_n'] <-
       sum(COHORT.scaled.demissed[, paste0(cox.var.imp$quantity[i], '_missing')])
@@ -693,8 +711,8 @@ ggplot(
   geom_point(color = 'red') +
   geom_errorbar(
     aes(
-      ymin = missing_risk - missing_risk_err,
-      ymax = missing_risk + missing_risk_err
+      ymin = missing_risk_lower,
+      ymax = missing_risk_upper
     ), width = 0.5, colour = 'red'
   ) +
   geom_errorbar(aes(ymin = min_risk, ymax = max_risk), width = 0.2)
