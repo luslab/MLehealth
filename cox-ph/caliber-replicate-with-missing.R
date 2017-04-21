@@ -60,6 +60,7 @@ n.threads <- 8
 source('../lib/shared.R')
 require(xtable)
 require(ggrepel)
+source('caliber-scale.R')
 
 # Load the data and convert to data frame to make column-selecting code in
 # prepData simpler
@@ -103,15 +104,8 @@ test.set <- sample(1:n.data, (1/3)*n.data)
 #' ### Age
 #' 
 #' Risk of death is a nonlinear function of age at the start of the study, so
-#' it is modelled with a cubic spline.
-
-ageSpline <- function(x) {
-  max((x-51)/10.289,0)^3 + 
-    (69-51) * (max((x-84)/10.289,0)^3) -
-    ((84-51) * (max(((x-69))/10.289,0))^3)/(84-69)
-}
-
-#' Let's have a look at what that function looks like...
+#' it is modelled with a cubic spline. Let's have a look at what that function
+#' looks like...
 
 df <- data.frame(
   x = 50:100,
@@ -132,74 +126,9 @@ ggplot(df, aes(x,y)) +
 #' * The IMD (social deprivation) score is used by flagging those patients who
 #'   are in the bottom quintile.
 
+
 COHORT.scaled <-
-  data.frame(
-    ## Time to event
-    surv_time = COHORT.use[, surv.time],
-    ## Death/censorship
-    surv_event = COHORT.use[, surv.event] %in% surv.event.yes,
-    ## Rescaled age
-    age = sapply(COHORT.use$age, ageSpline),
-    ## Gender
-    gender = COHORT.use$gender,
-    ## Most deprived quintile, yes vs. no
-    most_deprived =
-      COHORT.use$imd_score > quantile(COHORT.use$imd_score, 0.8, na.rm = TRUE),
-    ### SCAD diagnosis and severity ############################################
-    ## Other CHD / unstable angina / NSTEMI / STEMI vs. stable angina
-    diagnosis = factorChooseFirst(factor(COHORT.use$diagnosis), 'SA'),
-    ## PCI in last 6 months, yes vs. no
-    pci_6mo = COHORT.use$pci_6mo,
-    ## CABG in last 6 months, yes vs. no
-    cabg_6mo = COHORT.use$cabg_6mo,
-    ## Previous/recurrent MI, yes vs. no
-    hx_mi = COHORT.use$hx_mi,
-    ## Use of nitrates, yes vs. no
-    long_nitrate = COHORT.use$long_nitrate,
-    ### CVD risk factors #######################################################
-    ## Ex-smoker vs. never / Current smoker vs. never
-    smokstatus = factorChooseFirst(factor(COHORT.use$smokstatus), 'Non'),
-    ## Hypertension, present vs. absent
-    hypertension = COHORT.use$hypertension,
-    ## Diabetes mellitus, present vs. absent
-    diabetes_logical = COHORT.use$diabetes != 'No diabetes',
-    ## Total cholesterol, per 1 mmol/L increase
-    total_chol_6mo = (COHORT.use$total_chol_6mo - 5),
-    ## HDL, per 0.5 mmol/L increase
-    hdl_6mo = (COHORT.use$hdl_6mo - 1.5) / 0.5,
-    ### CVD co-morbidities #####################################################
-    ## Heart failure, present vs. absent
-    heart_failure = COHORT.use$heart_failure,
-    ## Peripheral arterial disease, present vs. absent
-    pad = COHORT.use$pad,
-    ## Atrial fibrillation, present vs. absent
-    hx_af = COHORT.use$hx_af,
-    ## Stroke, present vs. absent
-    hx_stroke = COHORT.use$hx_stroke,
-    ### Non-CVD comorbidities ##################################################
-    ## Chronic kidney disease, present vs. absent
-    hx_renal = COHORT.use$hx_renal,
-    ## Chronic obstructive pulmonary disease, present vs. absent
-    hx_copd = COHORT.use$hx_copd,
-    ## Cancer, present vs. absent
-    hx_cancer = COHORT.use$hx_cancer,
-    ## Chronic liver disease, present vs. absent
-    hx_liver = COHORT.use$hx_liver,
-    ### Psychosocial characteristics ###########################################
-    ## Depression at diagnosis, present vs. absent
-    hx_depression = COHORT.use$hx_depression,
-    ## Anxiety at diagnosis, present vs. absent
-    hx_anxiety = COHORT.use$hx_anxiety,
-    ### Biomarkers #############################################################
-    ## Heart rate, per 10 b.p.m increase
-    pulse_6mo = (COHORT.use$pulse_6mo - 70) / 10,
-    ## Creatinine, per 30 μmol/L increase
-    crea_6mo = (COHORT.use$crea_6mo - 60) / 30,
-    ## White cell count, per 1.5 109/L increase
-    total_wbc_6mo = (COHORT.use$total_wbc_6mo - 7.5) / 1.5,
-    ## Haemoglobin, per 1.5 g/dL increase
-    haemoglobin_6mo = (COHORT.use$haemoglobin_6mo - 13.5) / 1.5
-  )
+  caliberScale(COHORT.use)
 
 #' ## Missing values
 #' 
@@ -346,9 +275,9 @@ varsToTable(
     model = 'cox',
     imputation = FALSE,
     discretised = FALSE,
-    c.index = fit.exp.boot.ests['c.train', 'val'],
-    c.index.lower = fit.exp.boot.ests['c.train', 'lower'],
-    c.index.upper = fit.exp.boot.ests['c.train', 'upper']
+    c.index = fit.exp.boot.ests['c.test', 'val'],
+    c.index.lower = fit.exp.boot.ests['c.test', 'lower'],
+    c.index.upper = fit.exp.boot.ests['c.test', 'upper']
   ),
   performance.file
 )
@@ -693,6 +622,6 @@ ggplot() +
 #' current random seed: `r random.seed`
 #' 
 #' 
-#' Original random string: ``HLIQGMTCWIVJIMXWKUYL``
+#' Original random string: ``HPMFNEVRGMWPBYYLNUBB``
 #' 
 #' Current random string: ```r randomString(20, LETTERS)```
