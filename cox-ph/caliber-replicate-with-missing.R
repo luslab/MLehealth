@@ -41,10 +41,10 @@ n.data <- NA # This is of full dataset...further rows may be excluded in prep
 endpoint <- 'death'
 
 old.coefficients.filename <- 'rapsomaniki-cox-values-from-paper.csv'
+new.coefficients.filename <-
+  '../../output/caliber-replicate-with-missing-survreg-bootstrap-coeffs-1.csv'
 compare.coefficients.filename <-
   '../../output/caliber-replicate-with-missing-survreg-bootstrap-1.csv'
-cox.var.imp.filename <-
-  '../../output/caliber-replicate-with-missing-survreg-bootstrap-var-imp-1.csv'
 cox.var.imp.perm.filename <-
   '../../output/caliber-replicate-with-missing-survreg-bootstrap-var-imp-perm-1.csv'
 model.filename <-
@@ -57,7 +57,7 @@ n.threads <- 8
 
 #+ setup, message=FALSE
 
-source('../random-forest/shared.R')
+source('../lib/shared.R')
 require(xtable)
 require(ggrepel)
 
@@ -398,7 +398,7 @@ compare.coefficients[
   ]
 
 # Save CSV of results
-write.csv(compare.coefficients, output.filename)
+write.csv(compare.coefficients, new.coefficients.filename)
 
 # Plot a graph by which to judge success
 ggplot(compare.coefficients, aes(x = their_value, y = our_value)) +
