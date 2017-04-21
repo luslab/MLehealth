@@ -449,6 +449,9 @@ modelFactorLevelName <- function(factor.name, level.name, model.type) {
   } else if(model.type == 'survreg') {
     # factorLevel
     return(paste0(factor.name, level.name))
+  } else if(model.type == 'boot.survreg') {
+    # factorLevel
+    return(paste0(factor.name, level.name))
   }
 }
 
@@ -461,7 +464,8 @@ cphCoeffs <- function(cph.model, df, surv.predict, model.type = 'cph') {
     # Otherwise, it will come as a data frame of some kind
     coeff.names <- rownames(cph.model)
     coeff.vals  <- cph.model$val
-    coeff.errs  <- cph.model$err
+    coeff.lower  <- cph.model$lower
+    coeff.upper  <- cph.model$upper
   }
   
   # Get the names and levels from each of the factors used to create the
@@ -490,7 +494,8 @@ cphCoeffs <- function(cph.model, df, surv.predict, model.type = 'cph') {
       needle.i <- which(coeff.names == needle)
       # ...and set the relevant value and error
       surv.vars.df[i, 'val'] <- coeff.vals[needle.i]
-      surv.vars.df[i, 'err'] <- coeff.errs[needle.i]
+      surv.vars.df[i, 'lower'] <- coeff.lower[needle.i]
+      surv.vars.df[i, 'upper'] <- coeff.upper[needle.i]
     }
   }
   surv.vars.df
