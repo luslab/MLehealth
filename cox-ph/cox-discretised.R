@@ -12,6 +12,8 @@ opts_chunk$set(cache.lazy = FALSE)
 #' 
 
 calibration.filename <- '../../output/survreg-crossvalidation-try1.csv'
+caliber.missing.coefficients.filename <-
+  '../../output/caliber-replicate-with-missing-survreg-bootstrap-coeffs-1.csv'
 comparison.filename <-
   '../../output/caliber-replicate-with-missing-var-imp-try1.csv'
 # The first part of the filename for any output
@@ -54,15 +56,72 @@ print(surv.model.fit)
 #'
 #+ cox_coefficients_plot
 
-cph.coeffs <-
-  cphCoeffs(
-    surv.model.fit.coeffs, COHORT.optimised, surv.predict,
-    model.type = model.type
+# Unpackage the uncertainties from the bootstrapped data
+surv.boot.ests <- bootStats(surv.model.fit, uncertainty = '95ci')
+
+# Save bootstrapped performance values
+varsToTable(
+  data.frame(
+    model = 'cox',
+    imputation = FALSE,
+    discretised = FALSE,
+    c.index = surv.boot.ests['c.test', 'val'],
+    c.index.lower = surv.boot.ests['c.test', 'lower'],
+    c.index.upper = surv.boot.ests['c.test', 'upper']
+  ),
+  performance.file
+)
+
+# Unpackage the uncertainties again, this time transformed to risks
+surv.boot.ests <- 
+  bootStats(surv.model.fit, uncertainty = '95ci', transform = negExp)
+
+#' First, plot the factors and logicals as a scatter plot to compare with the
+#' continuous Cox model...
+
+# Pull coefficients from model with missing data
+caliber.missing.coeffs <- read.csv(caliber.missing.coefficients.filename)
+
+# Rename surv.boot.ests ready for merging
+names(surv.boot.ests) <-
+  c('cox_discrete_value', 'cox_discrete_lower', 'cox_discrete_upper')
+surv.boot.ests$quantity.level <- rownames(surv.boot.ests)
+# Convert variablemissing to variable_missingTRUE for compatibility
+vars.with.missing <- endsWith(surv.boot.ests$quantity.level, 'missing')
+surv.boot.ests$quantity.level[vars.with.missing] <-
+  paste0(
+    substr(
+      surv.boot.ests$quantity.level[vars.with.missing],
+      1,
+      nchar(surv.boot.ests$quantity.level[vars.with.missing]) - nchar('missing')
+    ),
+    '_missingTRUE'
   )
 
-# Create columns to hold minimum and maximum values of bins
-cph.coeffs$bin.min <- NA
-cph.coeffs$bin.max <- NA
+# Create a data frame comparing them
+compare.coefficients <- merge(caliber.missing.coeffs, surv.boot.ests)
+
+ggplot(
+    compare.coefficients,
+    aes(x = our_value, y = cox_discrete_value, colour = unit == 'missing')
+  ) +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_hline(yintercept = 1, colour = 'grey') +
+  geom_vline(xintercept = 1, colour = 'grey') +
+  geom_point() +
+  geom_errorbar(aes(ymin = cox_discrete_lower, ymax = cox_discrete_upper)) +
+  geom_errorbarh(aes(xmin = our_lower, xmax = our_upper)) +
+  geom_text_repel(aes(label = long_name)) +
+  theme_classic(base_size = 8)
+
+# Unpack variable and level names
+cph.coeffs <- cphCoeffs(
+  bootStats(surv.model.fit, uncertainty = '95ci', transform = negExp),
+  COHORT.optimised, surv.predict, model.type = 'boot.survreg'
+)
+
+# We'll need the CALIBER scaling functions for plotting
+source('caliber-scale.R')
 
 for(variable in unique(cph.coeffs$var)) {
   # If it's a continuous variable, get the real centres of the bins
@@ -84,59 +143,130 @@ for(variable in unique(cph.coeffs$var)) {
       cph.coeffs$bin.max[cph.coeffs$var == variable & 
                            cph.coeffs$level != 'missing'] <-
         variable.quantiles[2:length(variable.quantiles)]
+      # Make the final bin the 99th percentile
+      cph.coeffs$bin.max[cph.coeffs$var == variable & 
+                           cph.coeffs$level != 'missing'][
+                             length(variable.quantiles) - 1] <-
+        quantile(COHORT.use[, variable], 0.99, na.rm = TRUE)
+      
+      # Add a fake data point at the highest value to finish the graph
+      cph.coeffs <-
+        rbind(
+          cph.coeffs,
+          cph.coeffs[cph.coeffs$var == variable & 
+                      cph.coeffs$level != 'missing', ][
+                        length(variable.quantiles) - 1, ]
+          )
+      # Change it so that bin.min is bin.max from the old one
+      cph.coeffs$bin.min[nrow(cph.coeffs)] <-
+        cph.coeffs$bin.max[cph.coeffs$var == variable & 
+                            cph.coeffs$level != 'missing'][
+                              length(variable.quantiles) - 1]
+      
+      # work out the limits on the x-axis by taking the 1st and 99th percentiles
+      x.axis.limits <- quantile(COHORT.use[, variable], c(0.01, 0.99), na.rm = TRUE)
+      # Use the max to provide a max value for the final bin
+      
       
       # Now, plot this variable as a stepped line plot using those quantile
       # boundaries
-      print(
+      cox.discrete.plot <-
         ggplot(
           subset(cph.coeffs, var == variable),
-          aes(x = bin.min, y = exp(-val))
+          aes(x = bin.min, y = val)
         ) +   
-          geom_step() +
-          geom_step(aes(y = exp(-(val-err))), colour = 'grey') +
-          geom_step(aes(y = exp(-(val+err))), colour = 'grey') +
-          geom_text(aes(label = bin.min), angle = 90, hjust = 0) +
-          # Missing value central estimate
-          geom_hline(
-            yintercept = exp(-cph.coeffs$val[cph.coeffs$var == variable & 
-                                               cph.coeffs$level == 'missing']),
-            colour = 'red'
-          ) +
-          # Missing value bounds
-          geom_hline(
-            yintercept = exp(-(cph.coeffs$val[cph.coeffs$var == variable & 
-                                                cph.coeffs$level == 'missing'] +
-                                 -cph.coeffs$err[cph.coeffs$var == variable & 
-                                                   cph.coeffs$level == 'missing']
-            )),
-            colour = 'red'
-          ) +
-          geom_hline(
-            yintercept = exp(-(cph.coeffs$val[cph.coeffs$var == variable & 
-                                                cph.coeffs$level == 'missing'] -
-                                 -cph.coeffs$err[cph.coeffs$var == variable & 
-                                                   cph.coeffs$level == 'missing']
-            )),
-            colour = 'red'
-          ) +
-          ggtitle(variable)
-      )
-    }
-  }  else {
-    # If there were no instructions, it's probably a normal factor, so plot it
-    # in the conventional way...
-    print(
-      ggplot(
-        subset(cph.coeffs, var == variable),
-        aes(x = factor(level), y = exp(-val))
-      ) +   
-        geom_bar(
-          width=0.9,
-          stat = "identity"
-        ) +
-        geom_errorbar(aes(ymin = exp(-(val + err)), ymax = exp(-(val - err)))) +
-        geom_text(aes(label = level), angle = 90, hjust = 0) +
+        geom_step() +
+        geom_step(aes(y = lower), colour = 'grey') +
+        geom_step(aes(y = upper), colour = 'grey') +
+        #geom_text(aes(label = bin.min), angle = 90, hjust = 0) +
+        # Missing values central estimate
+        coord_cartesian(xlim = c(x.axis.limits)) +
         ggtitle(variable)
-    )
+      
+      # If there's a missing value risk, add it
+      if(any(cph.coeffs$var == variable & cph.coeffs$level == 'missing')) {
+        cox.discrete.plot <-
+          cox.discrete.plot +
+          geom_pointrange(
+            data = cph.coeffs[cph.coeffs$var == variable & 
+                                cph.coeffs$level == 'missing', ],
+            aes(
+              x = x.axis.limits[2], # Place at the right-hand edge of plot
+              y = val,
+              ymin = lower,
+              ymax = upper
+            ),
+            colour = 'red'
+          )
+      }
+      
+      # Now, let's add the line from the continuous Cox model
+      continuous.cox <-
+        data.frame(
+          # Use 1000 values for a smooth line
+          var.x.values =
+            seq(
+              quantile(COHORT.use[, variable], 0.01, na.rm = TRUE),
+              quantile(COHORT.use[, variable], 0.99, na.rm = TRUE),
+              length.out = 1000
+            )
+        )
+      # Scale the x-values
+      continuous.cox$var.x.scaled <-
+        caliberScaleUnits(continuous.cox$var.x.values, variable)
+      # Use the risks to calculate risk per x for central estimate and errors
+      continuous.cox$y <-
+        caliber.missing.coeffs$our_value[
+          caliber.missing.coeffs$quantity == variable
+          ] ^ continuous.cox$var.x.scaled
+      continuous.cox$upper <-
+        caliber.missing.coeffs$our_upper[
+          caliber.missing.coeffs$quantity == variable
+          ] ^ continuous.cox$var.x.scaled
+      continuous.cox$lower <-
+        caliber.missing.coeffs$our_lower[
+          caliber.missing.coeffs$quantity == variable
+          ] ^ continuous.cox$var.x.scaled
+      
+      cox.discrete.plot <-
+        cox.discrete.plot +
+        geom_line(
+          data = continuous.cox,
+          aes(x = var.x.values, y = y),
+          colour = 'blue'
+        ) +
+        geom_line(
+          data = continuous.cox,
+          aes(x = var.x.values, y = upper),
+          colour = 'lightblue'
+        ) +
+        geom_line(
+          data = continuous.cox,
+          aes(x = var.x.values, y = lower),
+          colour = 'lightblue'
+        )
+      
+      # If there is one, add missing value risk from the continuous model
+      if(any(caliber.missing.coeffs$quantity == paste0(variable, '_missing') &
+             caliber.missing.coeffs$unit == 'missing')) {
+        cox.discrete.plot <-
+          cox.discrete.plot +
+          geom_pointrange(
+            data = caliber.missing.coeffs[
+              caliber.missing.coeffs$quantity == paste0(variable, '_missing') &
+              caliber.missing.coeffs$unit == 'missing',
+            ],
+            aes(
+              x = x.axis.limits[2] - diff(x.axis.limits)/100, # Just before RHS
+              y = our_value,
+              ymin = our_lower,
+              ymax = our_upper
+            ),
+            colour = 'blue'
+          )
+      }
+      
+      print(cox.discrete.plot)
+    }
   }
 }
