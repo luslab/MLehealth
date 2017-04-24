@@ -161,7 +161,7 @@ prepData <- function(
         process.fun <- match.fun(process.settings$method[j])
         
         # If there are no process settings for this, just call the function
-        if(is.na(process.settings$settings[[j]])) {
+        if(isExactlyNA(process.settings$settings[[j]])) {
           df[, col.name] <- process.fun(df[, col.name])
         # Otherwise, call the function with settings
         } else {
