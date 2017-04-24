@@ -686,6 +686,30 @@ NA2val <- function(x, val = 0) {
   x
 }
 
+isExactlyNA <- function(x) {
+  # Is an object NA, or is it another kind of object? Unlike is.na, this is not
+  # a vector operation and doesn't return eg a vector with whether or not each
+  # value is NA, it would simply return FALSE because the object isn't an NA.
+  # This is to prevent warnings when performing if statements on things like
+  # optional arguments where NA is the default, but a vector could be passed,
+  # and the if statement then warns that only the first element was used.
+  #
+  # Args:
+  #     x: The object to be tested.
+  #
+  # Returns:
+  #   TRUE if the object is literally just NA; FALSE otherwise.
+  
+  # NA is of type logical, so in order to be a true NA, it must be...
+  if(is.logical(x) & length(x) == 1) {
+    # If so, is it NA?
+    return(is.na(x))
+  } else {
+    # Otherwise, return FALSE
+    return(FALSE)
+  }
+}
+
 firstElement <- function(x) {
   # Function for apply-ing to lists which will return the first element of a
   # list element
