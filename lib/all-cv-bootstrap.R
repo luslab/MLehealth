@@ -1,16 +1,16 @@
 # All model types are bootstrapped this many times
-bootstraps <- 10
+bootstraps <- 200
 # n.trees is (obviously) only relevant for random forests
 n.trees <- 500
 # The following two variables are only relevant if the model.type is 'ranger'
 split.rule <- 'logrank'
-n.threads <- 3
+n.threads <- 16
 
 # Cross-validation variables
 input.n.bins <- 2:20
 cv.n.folds <- 3
-n.calibrations <- 100
-n.data <- 30000 # This is of full dataset...further rows may be excluded in prep
+n.calibrations <- 1000
+n.data <- NA # This is of full dataset...further rows may be excluded in prep
 
 continuous.vars <-
   c(
@@ -54,7 +54,12 @@ if(!file.exists(calibration.filename)) {
   # Create an empty data frame to aggregate stats per fold
   cv.performance <- data.frame()
   
-  for(i in 1:n.calibrations) {
+  # We can parallelise this bit with foreach, so set that up
+  initParallel(n.threads)
+  
+  # Run crossvalidations in parallel
+  cv.performance <- 
+    foreach(i = 1:n.calibrations, .combine = 'rbind') %dopar% {
     cat(
       'Calibration', i, '...\n'
     )
@@ -101,7 +106,9 @@ if(!file.exists(calibration.filename)) {
     
     # Get folds for cross-validation
     cv.folds <- cvFolds(nrow(COHORT.cv), cv.n.folds)
-  
+    
+    cv.fold.performance <- data.frame()
+    
     for(j in 1:cv.n.folds) {
       time.start <- handyTimer()
       # Fit model to the training set
@@ -129,9 +136,9 @@ if(!file.exists(calibration.filename)) {
       time.predict <- handyTimer(time.start)
       
       # Append the stats we've obtained from this fold
-      cv.performance <-
+      cv.fold.performance <-
         rbind(
-          cv.performance,
+          cv.fold.performance,
           data.frame(
             calibration = i,
             cv.fold = j,
@@ -143,12 +150,14 @@ if(!file.exists(calibration.filename)) {
           )
         )
       
-      # Save output at each step
-      write.csv(cv.performance, calibration.filename)
-      
     } # End cross-validation loop (j)
     
+    # rbind the performance by fold
+    cv.fold.performance
   } # End calibration loop (i)
+  
+  # Save output at end of calibration
+  write.csv(cv.performance, calibration.filename)
 
 } else { # If we did previously calibrate, load it
   cv.performance <- read.csv(calibration.filename)
