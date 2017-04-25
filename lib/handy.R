@@ -727,7 +727,7 @@ NArm <- function(x) {
 }
 
 
-samplePlus <- function(x, ..., na.rm = TRUE) {
+samplePlus <- function(x, ..., na.rm = TRUE, only.unique = FALSE) {
   # Extension of the sample function from base R with the option of only
   # sampling from non-missing values.
   #
@@ -743,6 +743,9 @@ samplePlus <- function(x, ..., na.rm = TRUE) {
   
   if(na.rm) {
     x <- NArm(x)
+  }
+  if(only.unique) {
+    x <- unique(x)
   }
   sample(x, ...)
 }
