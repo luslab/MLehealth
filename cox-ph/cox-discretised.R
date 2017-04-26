@@ -11,13 +11,13 @@ opts_chunk$set(cache.lazy = FALSE)
 #' 
 #' 
 
-calibration.filename <- '../../output/survreg-crossvalidation-try1.csv'
+calibration.filename <- '../../output/survreg-crossvalidation-try2.csv'
 caliber.missing.coefficients.filename <-
   '../../output/caliber-replicate-with-missing-survreg-bootstrap-coeffs-1.csv'
 comparison.filename <-
-  '../../output/caliber-replicate-with-missing-var-imp-try1.csv'
+  '../../output/caliber-replicate-with-missing-var-imp-try2.csv'
 # The first part of the filename for any output
-output.filename.base <- '../../output/all-cv-survreg-boot-try1'
+output.filename.base <- '../../output/all-cv-survreg-boot-try2'
 
 
 # What kind of model to fit to...currently 'cph' (Cox model), 'ranger' or
@@ -47,7 +47,7 @@ source('../lib/all-cv-bootstrap.R', chdir = TRUE)
 #' `r round(surv.model.fit.coeffs['c.test', 'err'], 3)`** on the held-out test set.
 #' 
 #' ## Model fit
-#' 
+#'
 #+ resulting_fit
 
 print(surv.model.fit)
@@ -64,7 +64,7 @@ varsToTable(
   data.frame(
     model = 'cox',
     imputation = FALSE,
-    discretised = FALSE,
+    discretised = TRUE,
     c.index = surv.boot.ests['c.test', 'val'],
     c.index.lower = surv.boot.ests['c.test', 'lower'],
     c.index.upper = surv.boot.ests['c.test', 'upper']
@@ -116,9 +116,15 @@ ggplot(
 
 # Unpack variable and level names
 cph.coeffs <- cphCoeffs(
-  bootStats(surv.model.fit, uncertainty = '95ci', transform = negExp),
+  bootStats(surv.model.fit, uncertainty = '95ci', transform = identity),
   COHORT.optimised, surv.predict, model.type = 'boot.survreg'
 )
+
+# Transform these after extraction, because the default value for the base
+# level of a factor in bootStats is 0, and e^0 = 1
+cph.coeffs$val <- negExp(cph.coeffs$val)
+cph.coeffs$lower <- negExp(cph.coeffs$lower)
+cph.coeffs$upper <- negExp(cph.coeffs$upper)
 
 # We'll need the CALIBER scaling functions for plotting
 source('caliber-scale.R')
@@ -167,6 +173,35 @@ for(variable in unique(cph.coeffs$var)) {
       x.axis.limits <- quantile(COHORT.use[, variable], c(0.01, 0.99), na.rm = TRUE)
       # Use the max to provide a max value for the final bin
       
+      
+      # Finally, we need to scale this such that the baseline value is equal
+      # to the value for the equivalent place in the Cox model, to make the
+      # risks comparable...
+      
+      # First, we need to find the average value of this variable in the lowest
+      # bin (which is always the baseline here)
+      baseline.bin <- variable.quantiles[1:2]
+      baseline.bin.avg <- 
+        mean(
+          # Take only those values of the variable which are in the range
+          COHORT.use[
+            inRange(COHORT.use[, variable], baseline.bin, na.false = TRUE),
+            variable
+          ]
+        )
+      # Then, scale it with the caliber scaling
+      baseline.bin.val <- caliberScaleUnits(baseline.bin.avg, variable)
+      # Finally, convert it to a risk
+      baseline.bin.risk <- 
+        caliber.missing.coeffs$our_value[
+          caliber.missing.coeffs$quantity == variable
+          ] ^ baseline.bin.val
+      
+      # And now, multiply all the discretised values by that value to make them
+      # comparable...
+      cph.coeffs[cph.coeffs$var == variable, c('val', 'lower', 'upper')] <-
+        cph.coeffs[cph.coeffs$var == variable, c('val', 'lower', 'upper')] *
+        baseline.bin.risk
       
       # Now, plot this variable as a stepped line plot using those quantile
       # boundaries
