@@ -876,7 +876,8 @@ initParallel <- function(cores = NULL) {
   require(foreach)
 }
 
-inRange <- function(x, rang, incl.end = rep(FALSE, length(rang))) {
+inRange <-
+  function(x, rang, incl.end = rep(FALSE, length(rang)), na.false = FALSE) {
   # Returns a vector of booleans specifying whether values of x fall within the
   # range rang.
   #
@@ -888,6 +889,7 @@ inRange <- function(x, rang, incl.end = rep(FALSE, length(rang))) {
   #             'range' function in base R.
   #   incl.end: A vector of the same length as rang specifying whether a given
   #             endpoint is included or excluded from the range.
+  #   na.false: Return NA values as not in range?
   #
   # Returns:
   #   A boolean with the same length of x, TRUE if within the range specified,
@@ -900,9 +902,11 @@ inRange <- function(x, rang, incl.end = rep(FALSE, length(rang))) {
   
   # find those which are bigger than the minimum value (including endpoint if
   # specified)...
-  if(incl.end[i.min]){x >= rang[i.min]}else{x > rang[i.min]} &
+  if(incl.end[i.min]) {x >= rang[i.min]} else {x > rang[i.min]} &
   # ...and those smaller than the max...
-  if(incl.end[i.max]){x <= rang[i.max]}else{x < rang[i.max]}
+  if(incl.end[i.max]) {x <= rang[i.max]} else {x < rang[i.max]} &
+  # ...and, if applicable, set NA values to false?
+  if(na.false) {!is.na(x)} else {TRUE}
   # ...and return it!
 }
 
