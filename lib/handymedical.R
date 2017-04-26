@@ -6,6 +6,7 @@ requirePlus(
   #'CALIBERcodelists',
   #'CALIBERlookups',
   'plyr',
+  'dplyr',
   'ggplot2',
   'utils',
   'reshape2',
@@ -358,9 +359,21 @@ cvFolds <- function(n.data, n.folds = 3) {
   )
 }
 
-cIndex <- function(model.fit, df, model.type = 'cph', risk.time = 5,
-                   tod.round = 0.1, ...) {
-  if(model.type == 'rfsrc') {
+modelType <- function(model.fit) {
+  # Take a model fit and return a string representing its type so as to deal
+  # with it correctly
+  
+  # rfsrc for some reason has multiple classes associated with its fit objects
+  if('rfsrc' %in% class(model.fit)) {
+    return('rfsrc')
+  # Other models are more sensible, and simply returning the class will do
+  } else {
+    return(class(model.fit))
+  }
+}
+
+cIndex <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
+  if(modelType(model.fit) == 'rfsrc') {
     # rfsrc throws an error unless the y-values in the provided data are
     # identical to those used to train the model, so recreate the rounded ones..
     df$surv_time_round <-
@@ -368,32 +381,22 @@ cIndex <- function(model.fit, df, model.type = 'cph', risk.time = 5,
   }
   
   # Calculate the C-index for a Cox proportional hazards model on data in df
-  predictions <- predict(model.fit, df, ...)
-  # If we're dealing with a ranger model, then we need to get a proxy for risk
-  if(model.type == 'ranger') {
-    risk.bin <- which.min(abs(predictions$unique.death.times - risk.time))
-    # Get the chance of having died (ie 1 - survival) for all patients at that time (ie in that bin)
-    predictions <- 1 - predictions$survival[, risk.bin]
-  } else if(model.type == 'rfsrc') {
-    # If we're dealing with a randomForestSRC model, extract the 'predicted' var
-    predictions <- predictions$predicted
-  } else if(model.type == 'survreg') {
-    # survreg type models give larger numbers for longer survival...this is a
-    # hack to make this return C-indices which make sense!
-    predictions <- max(predictions) - predictions
-  }
+  
+  # First, get some risks, or values proportional to them
+  risk <- getRisk(model.fit, df, ...)
+  
+  # Then, get the C-index and, since we don't probably want to do any further
+  # work with it, simply return the numerical value of the index itself.
   as.numeric(
     survConcordance(
-      Surv(surv_time, surv_event) ~ predictions,
+      Surv(surv_time, surv_event) ~ risk,
       df
     )$concordance
   )
 }
 
-generalVarImp <- function(model.fit, df, model.type = 'cph', risk.time = 5,
-                          tod.round = 0.1, ...) {
-  baseline.c.index <- cIndex(model.fit, df, model.type, risk.time, tod.round,
-                             ...)
+generalVarImp <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
+  baseline.c.index <- cIndex(model.fit, df, risk.time, tod.round, ...)
   
   var.imp <- data.frame(
      var = names(df), # need to somehow exclude outcome vars
@@ -406,7 +409,7 @@ generalVarImp <- function(model.fit, df, model.type = 'cph', risk.time = 5,
     # Permute values of the sample in question
     df2[, var.imp[i, 'var']] <- sample(df[, var.imp[i, 'var']], replace = TRUE)
     # Calculate the C-index based on the permuted data
-    var.c.index <- cIndex(model.fit, df2, model.type, risk.time, tod.round,
+    var.c.index <- cIndex(model.fit, df2, risk.time, tod.round,
                           ...)
     var.imp[i, 'var.imp'] <- baseline.c.index - var.c.index
   }
@@ -774,3 +777,63 @@ bootStats <- function(bootfit, uncertainty = 'sd', transform = identity) {
 negExp <- function(x) {
   exp(-x)
 }
+
+getRisk <- function(model.fit, df, risk.time = 5, ...) {
+  
+  # Make predictions for the data df based on the model model.fit
+  predictions <- predict(model.fit, df, ...)
+  
+  # Then, for any model other than cph, they will need to be transformed in some
+  # way to get a proxy for risk...
+  
+  # If we're dealing with a ranger model, then we need to get a proxy for risk
+  # TODO: Replace model.type ifs (which now do nothing) with class-based ones
+  if(modelType(model.fit) == 'ranger') {
+    risk.bin <- which.min(abs(predictions$unique.death.times - risk.time))
+    # Get the chance of having died (ie 1 - survival) for all patients at that time (ie in that bin)
+    predictions <- 1 - predictions$survival[, risk.bin]
+  } else if(modelType(model.fit) == 'rfsrc') {
+    # If we're dealing with a randomForestSRC model, extract the 'predicted' var
+    predictions <- predictions$predicted
+  } else if(modelType(model.fit) == 'survreg') {
+    # survreg type models give larger numbers for longer survival...this is a
+    # hack to make this return C-indices which make sense!
+    predictions <- max(predictions) - predictions
+  }
+  
+  predictions
+}
+
+generalEffectDf <-
+  function(
+    model.fit, df, variable, n.patients = 1000, max.values = 200,
+    risk.time = 5, ...
+  ) {
+    # The number of values we look at will be either max.values, or the number of
+    # unique values if that's lower
+    n.values <- min(max.values, length(unique(df[,variable])))
+    
+    # Take a sample of df, but repeat each one of those samples n.values times
+    df.sample <- COHORT.prep[rep(sample(test.set, n.patients), each = n.values),]
+    # Give each value from the original df an id, so we can keep track
+    df.sample$id <- rep(1:n.patients, each = n.values)
+    
+    # Each individual patient from the original sample is then assigned every
+    # value of the variable we're interested in exploring
+    df.sample[, variable] <-
+      sort(
+        samplePlus(df[, variable], n.values, na.rm = FALSE, only.unique = TRUE)
+      )
+    
+    # Use the model to make predictions
+    df.sample$risk <- getRisk(model.fit, df.sample, risk.time, ...)
+    
+    # Use ddply to normalise the risk for each patient by the mean risk for that
+    # patient across all values of variable, thus averaging out any risk offsets
+    # between patients, and return that data frame.
+    as.data.frame(
+      df.sample %>%
+        group_by(id) %>%
+        mutate(risk.normalised = risk/mean(risk))
+    )
+  }
