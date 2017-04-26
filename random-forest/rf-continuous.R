@@ -2,7 +2,7 @@
 
 # Whether to cache the intensive code sections. Set to FALSE to recalculate
 # everything afresh.
-cacheoption <- TRUE
+cacheoption <- FALSE
 # Disable lazy caching globally, because it fails for large objects, and all the
 # objects we wish to cache are large...
 opts_chunk$set(cache.lazy = FALSE)
@@ -16,10 +16,12 @@ opts_chunk$set(cache.lazy = FALSE)
 #+ user_variables, message=FALSE
 
 data.filename <- '../../data/cohort-sanitised.csv'
+output.base <- '../output/rf-continuous-try2'
 
-endpoint <- 'mi' # Change to MI to look for MI...anything else uses death
+endpoint <- 'death' # Change to MI to look for MI...anything else uses death
 
 n.trees <- 500
+n.threads <- 8
 
 continuous.vars <-
   c(
@@ -28,7 +30,7 @@ continuous.vars <-
   )
 untransformed.vars <- c('anonpatid', 'surv_time', 'imd_score', 'exclude')
 
-source('shared.R')
+source('../lib/shared.R')
 require(ggrepel)
 
 #' ## Fit random forest model
@@ -72,16 +74,27 @@ surv.model.fit <-
     COHORT.prep[-test.set,],
     model.type = 'ranger',
     n.trees = n.trees,
-    split.rule = 'logrank',
-    n.threads = 8,
-    respect.unordered.factors = 'partition'
+    n.threads = n.threads
   )
 
+saveRDS(surv.model.fit, paste0(output.base, '-surv-forest.rds'))
+
 # Get C-indices for training and test sets
-c.index.train <-
-  cIndex(surv.model.fit, COHORT.prep[-test.set, ], model.type = 'ranger')
-c.index.test <- 
-  cIndex(surv.model.fit, COHORT.prep[test.set, ], model.type = 'ranger')
+c.index.train <- cIndex(surv.model.fit, COHORT.prep[-test.set, ])
+c.index.test <- cIndex(surv.model.fit, COHORT.prep[test.set, ])
+
+# Save the C-index on the test set as the model performance
+varsToTable(
+  data.frame(
+    model = 'random_forest',
+    imputation = FALSE,
+    discretised = FALSE,
+    c.index = c.index.test,
+    c.index.lower = NA, # bootstrapping not yet implemented
+    c.index.upper = NA
+  ),
+  performance.file
+)
 
 #' # Results
 #' 
@@ -96,3 +109,36 @@ c.index.test <-
 #+ resulting_fit
 
 print(surv.model.fit)
+
+#' ## Effects of variables
+#' 
+#' Whilst random forests are often considered something of a black box, it is
+#' possible to get some insight into how each variable affects the output simply
+#' by varying it and seeing what happens. That's what these functions do: take,
+#' say, 1000 random patients, and run each of them through the model many times
+#' with different values of the variable of interest, and see how the resulting
+#' risk varies. Let's try it...
+#' 
+#+ rf_variable_effects
+
+for(variable in continuous.vars) {
+  risk.by.variable <- generalEffectDf(surv.model.fit, COHORT.prep, variable)
+  
+  # Get the mean of the normalised risk for every value of the variable
+  risk.aggregated <-
+    aggregate(
+      as.formula(paste0('risk.normalised ~ ', variable)),
+      risk.by.variable, mean
+    )
+  
+  # work out the limits on the x-axis by taking the 1st and 99th percentiles
+  x.axis.limits <-
+    quantile(COHORT.full[, variable], c(0.01, 0.99), na.rm = TRUE)
+  
+  print(
+    ggplot(risk.by.variable, aes_string(x = variable, y = 'risk.normalised')) +
+      geom_line(alpha=0.01, aes(group = id)) +
+      geom_line(data = risk.aggregated, colour = 'blue') +
+      coord_cartesian(xlim = c(x.axis.limits))
+  )
+}
