@@ -4,10 +4,10 @@ bootstraps <- 200
 n.trees <- 500
 # The following two variables are only relevant if the model.type is 'ranger'
 split.rule <- 'logrank'
-n.threads <- 16
+n.threads <- 8
 
 # Cross-validation variables
-input.n.bins <- 2:20
+input.n.bins <- 10:20
 cv.n.folds <- 3
 n.calibrations <- 1000
 n.data <- NA # This is of full dataset...further rows may be excluded in prep
@@ -118,8 +118,8 @@ if(!file.exists(calibration.filename)) {
           COHORT.cv[-cv.folds[[j]],],
           model.type = model.type,
           n.trees = n.trees,
-          split.rule = split.rule,
-          n.threads = n.threads
+          split.rule = split.rule
+          # n.threads not used because this is run in parallel
         )
       time.learn <- handyTimer(time.start)
       
