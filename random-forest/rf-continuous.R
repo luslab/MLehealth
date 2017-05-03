@@ -10,19 +10,19 @@ opts_chunk$set(cache.lazy = FALSE)
 #' # Trying out continuous variables in random survival forests
 #' 
 #' So far, I've been looking at binning to account for missing data in random
-#' forests. Let's try continuing to treat them continuously, and shunting
-#' missing values to one or other end of the data range.
+#' forests. Let's try using RFSRC's imputation function, together with a flag
+#' to indicate missingness.
 
 #+ user_variables, message=FALSE
 
 data.filename <- '../../data/cohort-sanitised.csv'
-output.base <- '../output/rf-continuous-try2'
+output.base <- '../output/rf-continuous-try5'
 
 endpoint <- 'death' # Change to MI to look for MI...anything else uses death
 
 n.trees <- 500
-n.threads <- 8
-
+n.threads <- 16
+# What to do with missing data
 continuous.vars <-
   c(
     'age', 'total_chol_6mo', 'hdl_6mo', 'pulse_6mo', 'crea_6mo',
@@ -33,22 +33,21 @@ untransformed.vars <- c('anonpatid', 'surv_time', 'imd_score', 'exclude')
 source('../lib/shared.R')
 require(ggrepel)
 
+missingReplace <- NA # ie, don't change the values!
+
 #' ## Fit random forest model
 
 # Load the data and convert to data frame to make column-selecting code in
 # prepData simpler
 COHORT.full <- data.frame(fread(data.filename))
 
-# Define process settings; nothing for those to not transform, and missingToBig
-# for the continuous ones...
+# Define process settings; at first, we're going to do nothing to anything
+# continuous, because we may want to make _missing columns which this function
+# can't do...
 process.settings <-
   list(
     var        = c(untransformed.vars, continuous.vars),
-    method     =
-      c(
-        rep(NA, length(untransformed.vars)),
-        rep('missingToBig', length(continuous.vars))
-      ),
+    method     = rep(NA, length(untransformed.vars) + length(continuous.vars)),
     settings   = rep(NA, length(untransformed.vars) + length(continuous.vars))
   )
 
@@ -67,21 +66,28 @@ n.data <- nrow(COHORT.prep)
 # Define indices of test set
 test.set <- sample(1:n.data, (1/3)*n.data)
 
+# Now, process the data such that we can fit a model to it...
+COHORT.use <- prepCoxMissing(COHORT.prep, missingReplace = missingReplace)
+
+surv.predict <- c(surv.predict, names(COHORT.use)[grepl('_missing', names(COHORT.use))])
+
 # Fit random forest
 surv.model.fit <-
   survivalFit(
     surv.predict,
-    COHORT.prep[-test.set,],
-    model.type = 'ranger',
+    COHORT.use[-test.set,],
+    model.type = 'rfsrc',
     n.trees = n.trees,
-    n.threads = n.threads
+    n.threads = n.threads,
+    split.rule = 'logrank',
+    na.action = 'na.impute'
   )
 
 saveRDS(surv.model.fit, paste0(output.base, '-surv-forest.rds'))
 
 # Get C-indices for training and test sets
-c.index.train <- cIndex(surv.model.fit, COHORT.prep[-test.set, ])
-c.index.test <- cIndex(surv.model.fit, COHORT.prep[test.set, ])
+c.index.train <- cIndex(surv.model.fit, COHORT.use[-test.set, ])
+c.index.test <- cIndex(surv.model.fit, COHORT.use[test.set, ])
 
 # Save the C-index on the test set as the model performance
 varsToTable(
@@ -93,7 +99,8 @@ varsToTable(
     c.index.lower = NA, # bootstrapping not yet implemented
     c.index.upper = NA
   ),
-  performance.file
+  performance.file,
+  index.cols = c('model', 'imputation', 'discretised')
 )
 
 #' # Results
