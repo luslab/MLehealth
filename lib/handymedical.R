@@ -88,6 +88,17 @@ binByAbs <- function(x, breaks) {
   )
 }
 
+missingToAverage <- function(x) {
+  if(is.factor(x)) {
+    # If it's a factor, replace with the most common level
+    return(NA2val(x, val = modalLevel(x)))
+    
+  } else {
+    # If it isn't a factor, replace with the median value
+    return(NA2val(x, val = median(x, na.rm = TRUE)))
+  }
+}
+
 missingToBig <- function(x) {
   # Removes missing values and gives them an extreme (high) value
   
@@ -107,6 +118,14 @@ missingToBig <- function(x) {
   
   # Set the NA values to that number and return
   NA2val(x, really.big.value)
+}
+
+missingToZero <- function(x) {
+  NA2val(x, val = 0)
+}
+
+missingToSample <- function(x) {
+  NA2val(x, val = samplePlus(x, replace = TRUE))
 }
 
 prepSurvCol <- function(df, col.time, col.event, event.yes) {
@@ -212,7 +231,8 @@ prepData <- function(
 }
 
 prepCoxMissing <- function(
-  df, missing.cols = NA, missing.suffix = '_missing', NAval = 'missing'
+  df, missing.cols = NA, missingReplace = missingToZero,
+  missing.suffix = '_missing', NAval = 'missing'
 ){
   # If a list of columns which may contain missing data wasn't provided, then
   # find those columns which do, in fact, contain missing data.
@@ -230,7 +250,6 @@ prepCoxMissing <- function(
   
   # Go through missing.cols, processing appropriately for data type
   for(col.name in missing.cols) {
-    
     # If it's a factor, simply create a new level for missing values
     if(is.factor(df[, col.name])) {
       # If it's a factor, NAs can be their own level
@@ -239,17 +258,20 @@ prepCoxMissing <- function(
       
     } else {
       # If it isn't a factor, first create a column designating missing values
-      df[, paste0(col.name, missing.suffix)] <-
-        is.na(df[, col.name])
+      df[, paste0(col.name, missing.suffix)] <- is.na(df[, col.name])
       
-      # Then, deal with the actual values to remove their effect, depending on
-      # variable type
-      if(is.logical(df[, col.name])) {
-        # Set the NA values to baseline so they don't contribute to the model
-        df[is.na(COHORT.scaled[, col.name]), col.name] <- FALSE
-      } else {
-        # Set the NA values to baseline so they don't contribute to the model
-        df[is.na(df[, col.name]), col.name] <- 0
+      # If we want to replace the missing values...
+      if(!isExactlyNA(missingReplace)) {
+      
+        # Then, deal with the actual values, depending on variable type
+        if(is.logical(df[, col.name])) {
+          # Set the NA values to baseline so they don't contribute to the model
+          df[is.na(COHORT.scaled[, col.name]), col.name] <- FALSE
+        } else {
+          # Set the NA values to the desired value, eg 0 (ie baseline in a Cox
+          # model with missingToZero), missingToMedian, missingToBig, etc...
+          df[, col.name] <- missingReplace(df[, col.name])
+        }
       }
       
     }
@@ -275,16 +297,7 @@ medianImpute <- function(df, missing.cols = NA) {
   
   # Go through missing.cols, processing appropriately for data type
   for(col.name in missing.cols) {
-    if(is.factor(df[, col.name])) {
-      # If it's a factor, replace with the most common level
-      df[, col.name] <-
-        NA2val(df[, col.name], val = modalLevel(df[, col.name]))
-      
-    } else {
-      # If it isn't a factor, replace with the median value
-      df[, col.name] <-
-        NA2val(df[, col.name], val = median(df[, col.name], na.rm = TRUE))
-    }
+    df[, col.name] <- missingToAverage(df[, col.name])
   }
   
   df
@@ -378,6 +391,11 @@ cIndex <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
     # identical to those used to train the model, so recreate the rounded ones..
     df$surv_time_round <-
       round_any(df$surv_time, tod.round)
+    # This means we need to use surv_time_round in the formula
+    surv.time <- 'surv_time_round'
+  } else {
+    # Otherwise, our survival time variable is just surv_time
+    surv.time <- 'surv_time'
   }
   
   # Calculate the C-index for a Cox proportional hazards model on data in df
@@ -389,7 +407,7 @@ cIndex <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
   # work with it, simply return the numerical value of the index itself.
   as.numeric(
     survConcordance(
-      Surv(surv_time, surv_event) ~ risk,
+      as.formula(paste0('Surv(', surv.time, ', surv_event) ~ risk')),
       df
     )$concordance
   )
