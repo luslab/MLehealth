@@ -714,7 +714,19 @@ survivalBootstrap <- function(
   } else if(model.type == 'ranger') {
     stop('model.type ranger not yet implemented')
   } else if(model.type == 'rfsrc') {
-    stop('model.type rfsrc not yet implemented')
+    return(
+      boot(
+        formula = surv.formula,
+        data = df,
+        statistic = bootstrapFitRfsrc,
+        R = bootstraps,
+        parallel = 'multicore',
+        ncpus = n.threads,
+        n.trees = n.trees,
+        test.data = df.test,
+        ...
+      )
+    )
   }
 }
 
@@ -755,6 +767,37 @@ bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
       coef(fit),
       c.train = cIndex(fit, data, model.type = 'survreg'),
       c.test = cIndex(fit, test.data, model.type = 'survreg')
+    )
+  )
+}
+
+bootstrapFitRfsrc <- function(formula, data, indices, n.trees, test.data, ...) {
+  # Wrapper function to pass an rfsrc fit with c-index calculations to boot.
+  
+  # Number of cores is determined by the bootstrap being in parallel, so just
+  # Make sure that rfsrc is only using a single core per fit
+  options(rf.cores = 1)
+  
+  d <- data[indices,]
+  fit <-  
+    rfsrc(
+      surv.formula,
+      df,
+      ntree = n.trees,
+      ...
+    )
+  
+  # Check the model calibration on the test set
+  calibration.table <- calibrationTable(fit, test.data)
+  calibration.score <- calibrationScore(calibration.table, curve = TRUE)
+  
+  # Return fit coefficients, c-index on training data, c-index on test data
+  return(
+    c(
+      coef(fit),
+      c.test = cIndex(fit, test.data, model.type = 'survreg'),
+      calibration.score$area,
+      calibration.score$curve
     )
   )
 }
