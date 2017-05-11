@@ -865,6 +865,64 @@ getRisk <- function(model.fit, df, risk.time = 5, ...) {
   predictions
 }
 
+getRiskAtTime <- function(model.fit, df, risk.time = 5, ...) {
+  
+  # If we're dealing with a ranger model, then we need to get a proxy for risk
+  if(modelType(model.fit) == 'ranger') {
+    # Make predictions for the data df based on the model model.fit
+    predictions <- predict(model.fit, df, ...)
+    
+    risk.bin <- which.min(abs(predictions$unique.death.times - risk.time))
+    # Get the chance of having died (ie 1 - survival) for all patients at that time (ie in that bin)
+    predictions <- 1 - predictions$survival[, risk.bin]
+    
+    
+  } else if(modelType(model.fit) == 'rfsrc') {
+    # Make predictions for the data df based on the model model.fit
+    predictions <- predict(model.fit, df, ...)
+    
+    # If we're dealing with a randomForestSRC model, do the same as ranger but
+    # with different variable names
+    risk.bin <- which.min(abs(predictions$time.interest - risk.time))
+    # Get the chance of having died (ie 1 - survival) for all patients at that time (ie in that bin)
+    predictions <- 1 - predictions$survival[, risk.bin]
+    
+    
+  } else if(modelType(model.fit) == 'survreg') {
+    # Make predictions for the data df based on the model
+    # 'quantile' returns the quantiles of risk, ie the 0.01 quantile would mean
+    # 0.01 ie 1% of patients would be dead by x. Returning the risk of death
+    # at a time t requires reverse-engineering this table.
+    # It doesn't make sense to go to p = 1 because technically by any model the
+    # 100th percentile is at infinity.
+    # It's really fast, so do 1000 quantiles for accuracy. Could make this a
+    # passable parameter...
+    risk.quantiles <- seq(0,0.999, 0.001)
+    
+    predictions <-
+      predict(model.fit, df, type = 'quantile', p = risk.quantiles, ...)
+    
+    predictions <-
+      # Find the risk quantile...
+      risk.quantiles[
+        # ...by choosing the element corresponding to the matrix output of
+        # predict, which has the same number of rows as df and a column per
+        # risk.quantiles...
+        apply(
+          predictions,
+          # ...and find the quantile closest to the risk.time being sought
+          FUN = function (x) {
+            which.min(abs(x - risk.time))
+          },
+          MARGIN = 1
+        )
+      ]
+  }
+  
+  # However obtained, return the predictions
+  predictions
+}
+
 generalEffectDf <-
   function(
     model.fit, df, variable, n.patients = 1000, max.values = 200,
