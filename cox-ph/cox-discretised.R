@@ -69,7 +69,8 @@ varsToTable(
     c.index.lower = surv.boot.ests['c.test', 'lower'],
     c.index.upper = surv.boot.ests['c.test', 'upper']
   ),
-  performance.file
+  performance.file,
+  index.cols = c('model', 'imputation', 'discretised')
 )
 
 # Unpackage the uncertainties again, this time transformed to risks
