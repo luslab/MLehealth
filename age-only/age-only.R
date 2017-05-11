@@ -16,7 +16,7 @@ bootstraps <- 200
 data.filename <- '../../data/cohort-sanitised.csv'
 n.threads <- 8
 
-source('../random-forest/shared.R')
+source('../lib/shared.R')
 require(rms)
 
 COHORT.full <- data.frame(fread(data.filename))
@@ -67,4 +67,20 @@ age.only.c.index <-
     ncpus = n.threads
   )
 
+age.only.c.index.ci <- bootStats(age.only.c.index, uncertainty = '95ci')
+
 #' The c-index is `r age.only.c.index$val` +/- `r age.only.c.index$err`.
+#' 
+
+varsToTable(
+  data.frame(
+    model = 'age',
+    imputation = FALSE,
+    discretised = FALSE,
+    c.index = age.only.c.index.ci['c.index', 'val'],
+    c.index.lower = age.only.c.index.ci['c.index', 'lower'],
+    c.index.upper = age.only.c.index.ci['c.index', 'upper']
+  ),
+  performance.file,
+  index.cols = c('model', 'imputation', 'discretised')
+)
