@@ -956,3 +956,121 @@ generalEffectDf <-
         mutate(risk.normalised = risk/mean(risk))
     )
   }
+
+calibrationTable <- function(
+  model.fit, df, risk.time = 5, tod.round = 0.1, ...
+  ) {
+  
+  if(modelType(model.fit) == 'rfsrc') {
+    # rfsrc throws an error unless the y-values in the provided data are
+    # identical to those used to train the model, so recreate the rounded ones..
+    df$surv_time_round <-
+      round_any(df$surv_time, tod.round)
+    # This means we need to use surv_time_round in the formula
+    surv.time <- 'surv_time_round'
+  } else {
+    # Otherwise, our survival time variable is just surv_time
+    surv.time <- 'surv_time'
+  }
+  
+  # Get risk values given this model
+  df$risk <- getRiskAtTime(model.fit, df, risk.time, ...)
+  
+  # Was there an event? Start with NA, because default is unknown (ie censored)
+  df$event <- NA
+  # Event before risk.time
+  df$event[df$surv_event & df$surv_time <= risk.time] <- TRUE
+  # Event after risk.time
+  df$event[df$surv_event & df$surv_time > risk.time] <- FALSE
+  # Censored after risk.time
+  df$event[!df$surv_event & df$surv_time > risk.time] <- FALSE
+  # Otherwise, censored before risk.time, leave as NA
+  
+  df[, c('risk', 'event')]
+}
+
+calibrationPlot <- function(df) {
+  # Convert risk to numeric, because ggplot treats logicals like categoricals
+  df$event <- as.numeric(df$event)
+  
+  # Create a dummy data frame of censored values to plot
+  censored.df <- df[is.na(df$event),]
+  censored.df$event <- 0.5
+  
+  ggplot(df, aes(x = risk, y = event)) +
+    geom_abline(slope = 1, intercept = 0) +
+    geom_point(position = position_jitter(w = 00, h = 0.25), alpha = 0.1) +
+    geom_point(
+      data = censored.df, colour = 'grey', alpha = 0.1,
+      position = position_jitter(w = 00, h = 0.125)
+    ) +
+    geom_smooth(method = 'loess') +
+    coord_cartesian(xlim = c(0,1), ylim = c(0,1))
+}
+
+calibrationScore <- function(
+  calibration.table, risk.breaks = seq(0, 1, 0.001), curve = FALSE
+  ) {
+  # * Could rewrite this with the integrate built-in function
+  # * Not totally sure about the standard error here...I assume just integrating
+  #   the uncertainty region will result in an overestimate?
+  
+  
+  # Fit a LOESS model to the data
+  loess.curve <- loess(event ~ risk, calibration.table)
+  
+  # Get the bin widths, which we'll need in a bit when integrating
+  risk.binwidths <- diff(risk.breaks)
+  # And the midpoints of the risk bins to calculate predictions at
+  risk.mids <- risk.breaks[1:(length(risk.breaks) - 1)] + risk.binwidths / 2
+  
+  predictions <-
+    predict(loess.curve, data.frame(risk = risk.mids), se = TRUE)
+  
+  if(anyNA(predictions$fit)) {
+    if(length(is.na(risk.mids) < 10)) {
+      warning.examples <- paste(risk.mids[is.na(risk.mids)], collapse = ', ')
+    } else {
+      warning.examples <-
+        paste(
+          paste(head(risk.mids[is.na(risk.mids)], 3), collapse = ', '),
+          '...',
+          paste(tail(risk.mids[is.na(risk.mids)], 3), collapse = ', ')
+        )
+    }
+    warning(
+      'Some predictions (for risk bins at ', warning.examples, ') return ',
+      'NA. This means calibration is being performed outside the range of the ',
+      'data which may mean values are not comparable.'
+    )
+  }
+  
+  curve.area <-
+    sum(
+      abs(predictions$fit - risk.mids) * risk.binwidths,
+      na.rm = TRUE
+    )
+  curve.area.se <-
+    sum(
+      abs(predictions$se.fit) * risk.binwidths,
+      na.rm = TRUE
+    )
+  
+  # If the curve was requested...
+  if(curve) {
+    # ...return area between lines and standard error, plus the curve
+    list(
+      area = curve.area,
+      se = curve.area.se,
+      curve = predictions$fit
+    )
+  } else {
+    # ...otherwise, just return the summary statistic
+    list(
+      area = curve.area,
+      se = curve.area.se
+    )
+  }
+  
+
+}
