@@ -42,13 +42,13 @@ endpoint <- 'death'
 
 old.coefficients.filename <- 'rapsomaniki-cox-values-from-paper.csv'
 new.coefficients.filename <-
-  '../../output/caliber-replicate-with-missing-survreg-bootstrap-coeffs-1.csv'
+  '../../output/caliber-replicate-with-missing-survreg-bootstrap-coeffs-2.csv'
 compare.coefficients.filename <-
-  '../../output/caliber-replicate-with-missing-survreg-bootstrap-1.csv'
+  '../../output/caliber-replicate-with-missing-survreg-bootstrap-2.csv'
 cox.var.imp.perm.filename <-
-  '../../output/caliber-replicate-with-missing-survreg-bootstrap-var-imp-perm-1.csv'
+  '../../output/caliber-replicate-with-missing-survreg-bootstrap-var-imp-perm-2.csv'
 model.filename <-
-  '../../output/caliber-replicate-with-missing-model-survreg-bootstrap-1.rds'
+  '../../output/caliber-replicate-with-missing-model-survreg-bootstrap-2.rds'
 
 bootstraps <- 100
 n.threads <- 8
@@ -126,9 +126,8 @@ ggplot(df, aes(x,y)) +
 #' * The IMD (social deprivation) score is used by flagging those patients who
 #'   are in the bottom quintile.
 
-
 COHORT.scaled <-
-  caliberScale(COHORT.use)
+  caliberScale(COHORT.use, surv.time, surv.event)
 
 #' ## Missing values
 #' 
@@ -154,12 +153,6 @@ missing.cols <-
   )
 COHORT.scaled.demissed <- prepCoxMissing(COHORT.scaled, missing.cols)
 
-# make a survival object
-COHORT.surv.train <- Surv(
-  time  = COHORT.scaled.demissed[-test.set, 'surv_time'],
-  event = COHORT.scaled.demissed[-test.set, 'surv_event']
-)
-
 #' ## Survival fitting
 #' 
 #' Fit a Cox model to the preprocessed data. The paper uses a Cox model with an
@@ -175,7 +168,7 @@ surv.formula <-
     ## Age in women, per year
     ## Women vs. men
     # ie include interaction between age and gender!
-    age*gender +
+    age + gender +
     ## Most deprived quintile, yes vs. no
     most_deprived +
     most_deprived_missing +
@@ -277,12 +270,18 @@ varsToTable(
     discretised = FALSE,
     c.index = fit.exp.boot.ests['c.test', 'val'],
     c.index.lower = fit.exp.boot.ests['c.test', 'lower'],
-    c.index.upper = fit.exp.boot.ests['c.test', 'upper']
+    c.index.upper = fit.exp.boot.ests['c.test', 'upper'],
+    calibration.score = fit.exp.boot.ests['calibration.score', 'val'],
+    calibration.score.lower = fit.exp.boot.ests['calibration.score', 'lower'],
+    calibration.score.upper = fit.exp.boot.ests['calibration.score', 'upper']
   ),
-  performance.file
+  performance.file,
+  index.cols = c('model', 'imputation', 'discretised')
 )
 
 #' ## Performance
+#' 
+#' ### C-index
 #' 
 #' Having fitted the Cox model, how did we do? The c-indices were calculated as
 #' part of the bootstrapping, so we just need to take a look at those...
@@ -294,6 +293,30 @@ varsToTable(
 #' (`r round(fit.exp.boot.ests['c.test', 'lower'], 3)` - 
 #' `r round(fit.exp.boot.ests['c.test', 'upper'], 3)`)** on the test set.
 #' Not too bad!
+#' 
+#' ### Calibration
+#' 
+#' The bootstrapped calibration score is
+#' **`r round(fit.exp.boot.ests['calibration.score', 'val'], 3)`
+#' (`r round(fit.exp.boot.ests['calibration.score', 'lower'], 3)` - 
+#' `r round(fit.exp.boot.ests['calibration.score', 'upper'], 3)`)**.
+#' 
+#' Let's draw a representative curve from the unbootstrapped fit... (It would be
+#' better to draw all the curves from the bootstrap fit to get an idea of
+#' variability, but I've not implemented this yet.)
+#' 
+#+ calibration_plot
+
+calibration.table <-
+  calibrationTable(fit.exp, COHORT.scaled.demissed[test.set, ])
+
+calibration.score <- calibrationScore(calibration.table)
+
+calibrationPlot(calibration.table)
+
+#' The area between the calibration curve and the diagonal is 
+#' **`r round(calibration.score[['area']], 3)`** +/-
+#' **`r round(calibration.score[['se']], 3)`**.
 #' 
 #' 
 #' ## Coefficients
