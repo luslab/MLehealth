@@ -32,9 +32,13 @@ caliberScaleUnits <- function(x, quantity) {
   x
 }
 
-caliberScale <- function(df) {
+caliberScale <- function(df, surv.time, surv.event) {
   # Return a data frame with all quantities normalised/scaled/standardised to
   # ranges etc used in Rapsomaniki et al. 2014
+  
+  # imd_score is sometimes turned into a factor, which causes an error with the
+  # quantile function. Since it's just integers, make it numeric.
+  df$imd_score <- as.numeric(df$imd_score)
   
   data.frame(
     ## Time to event
@@ -67,9 +71,9 @@ caliberScale <- function(df) {
     ## Diabetes mellitus, present vs. absent
     diabetes_logical = df$diabetes != 'No diabetes',
     ## Total cholesterol, per 1 mmol/L increase
-    total_chol_6mo = df$total_chol_6mo - 5,
+    total_chol_6mo = caliberScaleUnits(df$total_chol_6mo, 'total_chol_6mo'),
     ## HDL, per 0.5 mmol/L increase
-    hdl_6mo = (df$hdl_6mo - 1.5) / 0.5,
+    hdl_6mo = caliberScaleUnits(df$hdl_6mo, 'hdl_6mo'),
     ### CVD co-morbidities #####################################################
     ## Heart failure, present vs. absent
     heart_failure = df$heart_failure,
@@ -95,12 +99,12 @@ caliberScale <- function(df) {
     hx_anxiety = df$hx_anxiety,
     ### Biomarkers #############################################################
     ## Heart rate, per 10 b.p.m increase
-    pulse_6mo = (df$pulse_6mo - 70) / 10,
+    pulse_6mo = caliberScaleUnits(df$pulse_6mo, 'pulse_6mo'),
     ## Creatinine, per 30 μmol/L increase
-    crea_6mo = (df$crea_6mo - 60) / 30,
+    crea_6mo = caliberScaleUnits(df$crea_6mo, 'crea_6mo'),
     ## White cell count, per 1.5 109/L increase
-    total_wbc_6mo = (df$total_wbc_6mo - 7.5) / 1.5,
+    total_wbc_6mo = caliberScaleUnits(df$total_wbc_6mo, 'total_wbc_6mo'),
     ## Haemoglobin, per 1.5 g/dL increase
-    haemoglobin_6mo = (df$haemoglobin_6mo - 13.5) / 1.5
+    haemoglobin_6mo = caliberScaleUnits(df$haemoglobin_6mo, 'haemoglobin_6mo')
   )
 }
