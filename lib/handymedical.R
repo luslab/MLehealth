@@ -833,6 +833,51 @@ bootStats <- function(bootfit, uncertainty = 'sd', transform = identity) {
   }
 }
 
+bootMIStats <- function(boot.mi, uncertainty = '95ci', transform = identity) {
+  # Return a data frame with the statistics from a bootstrapped fit
+  #
+  # Args:
+  #     bootfit: A boot object.
+  # uncertainty: Function to use for returning uncertainty, defaulting to 'sd'
+  #              which returns the standard deviation.
+  #   transform: Optional transform for the statistics, defaults to identity, ie
+  #              leave the values as they are. Useful if you want the value and
+  #              variance of the exp(statistic), etc.
+  #
+  
+  boot.mi.combined <-
+    do.call(
+      # rbind together...
+      rbind,
+      # ...a list of matrices of bootstrap estimates extracted from the list of
+      # bootstrap fits
+      lapply(boot.mi, function(x){x$t})
+    )
+ 
+  if(uncertainty == 'sd'){
+    return(
+      data.frame(
+        val  = apply(transform(boot.mi.combined), 2, mean),
+        err  = apply(transform(boot.mi.combined), 2, sd),
+        row.names = names(boot.mi[[1]]$t0)
+      )
+    )
+  } else if(uncertainty == '95ci') {
+    ci <-
+      apply(transform(boot.mi.combined), 2, quantile, probs = c(0.025, 0.975))
+    return(
+      data.frame(
+        val  = apply(transform(boot.mi.combined), 2, mean),
+        lower = t(ci)[, 1],
+        upper = t(ci)[, 2],
+        row.names = names(boot.mi[[1]]$t0)
+      )
+    )
+  } else {
+    stop("Unknown value '", uncertainty, "' for uncertainty parameter.")
+  }
+}
+
 negExp <- function(x) {
   exp(-x)
 }
