@@ -789,15 +789,13 @@ bootstrapFitRfsrc <- function(formula, data, indices, n.trees, test.data, ...) {
   
   # Check the model calibration on the test set
   calibration.table <- calibrationTable(fit, test.data)
-  calibration.score <- calibrationScore(calibration.table, curve = TRUE)
+  calibration.score <- calibrationScore(calibration.table, curve = FALSE)
   
   # Return fit coefficients, c-index on training data, c-index on test data
   return(
     c(
-      coef(fit),
-      c.test = cIndex(fit, test.data, model.type = 'survreg'),
-      calibration.score$area,
-      calibration.score$curve
+      c.test = cIndex(fit, test.data),
+      calibration.score = calibration.score$area
     )
   )
 }
