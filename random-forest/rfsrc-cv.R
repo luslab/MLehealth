@@ -13,6 +13,7 @@ opts_chunk$set(cache.lazy = FALSE)
 #' and 20 bins, not between 2 and 20, in an attempt to avoid throwing away data.
 
 output.filename.base <- '../../output/rfsrc-cv-nsplit-try1'
+data.filename <- '../../data/cohort-sanitised.csv'
 
 # If surv.vars is defined as a character vector here, the model only uses those
 # variables specified, eg c('age') would build a model purely based on age. If
@@ -30,12 +31,36 @@ source('../lib/rfsrc-cv-nsplit-bootstrap.R', chdir = TRUE)
 #' # Results
 #' 
 #' 
-#' #' ## Performance
+#' ## Performance
+#' 
+#' ### Discrimination
 #' 
 #' C-indices are **`r round(surv.model.fit.coeffs['c.train', 'val'], 3)` +/-
 #' `r round(surv.model.fit.coeffs['c.train', 'err'], 3)`** on the training set and
 #' **`r round(surv.model.fit.coeffs['c.test', 'val'], 3)` +/-
 #' `r round(surv.model.fit.coeffs['c.test', 'err'], 3)`** on the held-out test set.
+#' 
+#' ### Calibration
+#' 
+#' Does the model predict realistic probabilities of an event?
+#' 
+#+ calibration_plot
+
+calibration.table <-
+  calibrationTable(
+    # Standard calibration options
+    surv.model.fit, COHORT.test,
+    # Always need to specify NA imputation for rfsrc
+    na.action = 'na.impute'
+  )
+
+calibration.score <- calibrationScore(calibration.table)
+
+calibrationPlot(calibration.table)
+
+#' The area between the calibration curve and the diagonal is 
+#' **`r round(calibration.score['area'], 3)`** +/-
+#' **`r round(calibration.score['se'], 3)`**.
 #' 
 #' ## Model fit
 #' 
