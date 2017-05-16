@@ -11,13 +11,13 @@ opts_chunk$set(cache.lazy = FALSE)
 #' 
 #' 
 
-calibration.filename <- '../../output/survreg-crossvalidation-try2.csv'
+calibration.filename <- '../../output/survreg-crossvalidation-try4.csv'
 caliber.missing.coefficients.filename <-
   '../../output/caliber-replicate-with-missing-survreg-bootstrap-coeffs-1.csv'
 comparison.filename <-
   '../../output/caliber-replicate-with-missing-var-imp-try2.csv'
 # The first part of the filename for any output
-output.filename.base <- '../../output/all-cv-survreg-boot-try2'
+output.filename.base <- '../../output/all-cv-survreg-boot-try4'
 
 
 # What kind of model to fit to...currently 'cph' (Cox model), 'ranger' or
@@ -41,10 +41,41 @@ source('../lib/all-cv-bootstrap.R', chdir = TRUE)
 #' 
 #' ## Performance
 #' 
-#' C-indices are **`r round(surv.model.fit.coeffs['c.train', 'val'], 3)` +/-
-#' `r round(surv.model.fit.coeffs['c.train', 'err'], 3)`** on the training set and
-#' **`r round(surv.model.fit.coeffs['c.test', 'val'], 3)` +/-
-#' `r round(surv.model.fit.coeffs['c.test', 'err'], 3)`** on the held-out test set.
+#' ### C-index
+#' 
+#' C-indices are **`r round(surv.model.fit.coeffs['c.train', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['c.train', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['c.train', 'upper'], 3)`)**
+#' on the training set and
+#' **`r round(surv.model.fit.coeffs['c.test', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['c.test', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['c.test', 'upper'], 3)`)** on the test set.
+#' 
+#'
+#' ### Calibration
+#' 
+#' The bootstrapped calibration score is
+#' **`r round(surv.model.fit.coeffs['calibration.score', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['calibration.score', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['calibration.score', 'upper'], 3)`)**.
+#' 
+#' Let's draw a representative curve from the unbootstrapped fit... (It would be
+#' better to draw all the curves from the bootstrap fit to get an idea of
+#' variability, but I've not implemented this yet.)
+#' 
+#+ calibration_plot
+
+calibration.table <-
+  calibrationTable(surv.model.fit, COHORT.optimised[test.set, ])
+
+calibration.score <- calibrationScore(calibration.table)
+
+calibrationPlot(calibration.table)
+
+#' The area between the calibration curve and the diagonal is 
+#' **`r round(calibration.score[['area']], 3)`** +/-
+#' **`r round(calibration.score[['se']], 3)`**.
+#' 
 #' 
 #' ## Model fit
 #'
@@ -57,7 +88,7 @@ print(surv.model.fit)
 #+ cox_coefficients_plot
 
 # Unpackage the uncertainties from the bootstrapped data
-surv.boot.ests <- bootStats(surv.model.fit, uncertainty = '95ci')
+surv.boot.ests <- bootStats(surv.model.fit.boot, uncertainty = '95ci')
 
 # Save bootstrapped performance values
 varsToTable(
@@ -65,17 +96,23 @@ varsToTable(
     model = 'cox',
     imputation = FALSE,
     discretised = TRUE,
-    c.index = surv.boot.ests['c.test', 'val'],
-    c.index.lower = surv.boot.ests['c.test', 'lower'],
-    c.index.upper = surv.boot.ests['c.test', 'upper']
+    c.index = surv.model.fit.coeffs['c.test', 'val'],
+    c.index.lower = surv.model.fit.coeffs['c.test', 'lower'],
+    c.index.upper = surv.model.fit.coeffs['c.test', 'upper'],
+    calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
+    calibration.score.lower =
+      surv.model.fit.coeffs['calibration.score', 'lower'],
+    calibration.score.upper =
+      surv.model.fit.coeffs['calibration.score', 'upper']
   ),
   performance.file,
   index.cols = c('model', 'imputation', 'discretised')
 )
 
-# Unpackage the uncertainties again, this time transformed to risks
+# Unpackage the uncertainties again, this time transformed because survreg
+# returns negative values
 surv.boot.ests <- 
-  bootStats(surv.model.fit, uncertainty = '95ci', transform = negExp)
+  bootStats(surv.model.fit.boot, uncertainty = '95ci', transform = `-`)
 
 #' First, plot the factors and logicals as a scatter plot to compare with the
 #' continuous Cox model...
@@ -117,7 +154,7 @@ ggplot(
 
 # Unpack variable and level names
 cph.coeffs <- cphCoeffs(
-  bootStats(surv.model.fit, uncertainty = '95ci', transform = identity),
+  bootStats(surv.model.fit.boot, uncertainty = '95ci', transform = identity),
   COHORT.optimised, surv.predict, model.type = 'boot.survreg'
 )
 
