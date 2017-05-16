@@ -411,7 +411,7 @@ write.csv(cox.var.imp.perm, cox.var.imp.perm.filename, row.names = FALSE)
 print(
   exp(
     -survreg(
-      COHORT.surv.train ~ gender,
+      Surv(surv_time, surv_event) ~ gender,
       data = COHORT.scaled[-test.set, ],
       dist = "exponential"
     )$coeff
@@ -426,7 +426,7 @@ print(
 print(
   exp(
     -survreg(
-      COHORT.surv.train ~ age + gender,
+      Surv(surv_time, surv_event) ~ age + gender,
       data = COHORT.scaled[-test.set, ],
       dist = "exponential"
     )$coeff
@@ -445,7 +445,7 @@ ggplot(COHORT.use, aes(x = age, group = gender, fill = gender)) +
 print(
   exp(
     -survreg(
-      COHORT.surv.train ~ age * gender,
+      Surv(surv_time, surv_event) ~ age * gender,
       data = COHORT.scaled[-test.set, ],
       dist = "exponential"
     )$coeff
