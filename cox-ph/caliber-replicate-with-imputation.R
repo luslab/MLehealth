@@ -242,7 +242,7 @@ old.coefficients <- read.csv(old.coefficients.filename)
 
 # Get coefficients from this fit
 new.coefficients <-
-  bootStats(fit.exp.boot, uncertainty = '95ci', transform = negExp)
+  bootMIStats(fit.exp.boot, uncertainty = '95ci', transform = negExp)
 names(new.coefficients) <- c('our_value', 'our_lower', 'our_upper')
 new.coefficients$quantity.level <- rownames(new.coefficients)
 
@@ -295,13 +295,14 @@ print(
 #' ### Variable importance
 #' 
 #' Let's compare the variable importance from this method with accounting for
-#' missing values explicitly...
+#' missing values explicitly. Slight kludge as it's only using one imputed
+#' dataset and a fit based on another, but should give some idea.
 #' 
 #+ cox_variable_importance
 
 cox.var.imp.perm <- 
   generalVarImp(
-    fit.exp, COHORT.scaled.demissed[test.set, ], model.type = 'survreg'
+    fit.exp, imputed.data[[2]][test.set, ], model.type = 'survreg'
   )
 
 write.csv(cox.var.imp.perm, cox.var.imp.perm.filename, row.names = FALSE)
