@@ -39,10 +39,17 @@ if(!exists('endpoint')) {
 }
 
 # If we're looking at MI...
-if(endpoint == 'mi'){
+if(endpoint == 'mi') {
   surv.time      <- 'time_coronary'
   surv.event     <- 'endpoint_coronary'
   surv.event.yes <- c('Nonfatal MI', 'Coronary death')
+  
+# If dealing with death in an imputed dataset...
+} else if(endpoint == 'death.imputed') {
+  surv.time    <- 'time_death'
+  surv.event   <- 'endpoint_death' 
+  surv.event.yes <- 1 # Coded as 1s and 0s for imputation
+  
 # Default is all-cause mortality...
 } else {
   # Name of column giving time for use in survival object
