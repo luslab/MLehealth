@@ -19,7 +19,7 @@ continuous.vars <-
 
 untransformed.vars <- c('anonpatid', 'surv_time', 'imd_score', 'exclude')
 
-source('shared.R')
+source('../lib/shared.R')
 require(ggrepel)
 
 # Load the data and convert to data frame to make column-selecting code in
@@ -50,6 +50,14 @@ n.data <- nrow(COHORT.prep)
 # Define indices of test set
 test.set <- sample(1:n.data, (1/3)*n.data)
 
+# Process settings: don't touch anything!!
+process.settings <-
+  list(
+    var       = c(untransformed.vars, continuous.vars),
+    method    = rep(NA, length(untransformed.vars) + length(continuous.vars)),
+    settings  = rep(NA, length(untransformed.vars) + length(continuous.vars))
+  )
+
 # If we've not already done a calibration, then do one
 if(!file.exists(calibration.filename)) {
   # Create an empty data frame to aggregate stats per fold
@@ -61,14 +69,6 @@ if(!file.exists(calibration.filename)) {
   
   # prep the data (since we're not cross-validating on data prep this can be
   # done before the loop)
-  
-  # Process settings: don't touch anything!!
-  process.settings <-
-    list(
-      var       = c(untransformed.vars, continuous.vars),
-      method    = rep(NA, length(untransformed.vars) + length(continuous.vars)),
-      settings  = rep(NA, length(untransformed.vars) + length(continuous.vars))
-    )
   
   # Prep the data
   COHORT.cv <-
@@ -189,40 +189,8 @@ best.calibration <-
 best.calibration.row1 <-
   min(which(cv.performance$calibration == best.calibration))
 
-# Get its parameters
-n.bins <-
-  t(
-    cv.performance[best.calibration.row1, continuous.vars]
-  )
-
-# Prepare the data with those settings...
-
-# Reset process settings with the base setings
-process.settings <-
-  list(
-    var        = c('anonpatid', 'time_death', 'imd_score', 'exclude'),
-    method     = c(NA, NA, NA, NA),
-    settings   = list(NA, NA, NA, NA)
-  )
-for(j in 1:length(continuous.vars)) {
-  process.settings$var <- c(process.settings$var, continuous.vars[j])
-  process.settings$method <- c(process.settings$method, 'binByQuantile')
-  process.settings$settings <-
-    c(
-      process.settings$settings,
-      list(
-        seq(
-          # Quantiles are obviously between 0 and 1
-          0, 1,
-          # Choose a random number of bins (and for n bins, you need n + 1 breaks)
-          length.out = n.bins[j]
-        )
-      )
-    )
-}
-
-# prep the data given the variables provided
-COHORT.optimised <-
+# Prep the data to fit and test with
+COHORT.prep <-
   prepData(
     # Data for cross-validation excludes test set
     COHORT.use,
@@ -233,14 +201,9 @@ COHORT.optimised <-
     extra.fun = caliberExtraPrep
   )
 
-# Variable importance argument varies depending on the package being used
-if(model.type == 'ranger'){
-  var.imp.arg <- 'permutation'
-} else if(model.type == 'rfsrc') {
-  var.imp.arg <- 'permute'
-} else {
-  var.imp.arg <- 'NULL'
-}
+# Finally, add missing flag columns, but leave the missing data intact because
+# rfsrc can do on-the-fly imputation
+COHORT.prep <- prepCoxMissing(COHORT.prep, missingReplace = NA)
 
 #' ## Fit the final model
 #' 
@@ -248,21 +211,58 @@ if(model.type == 'ranger'){
 
 #+ fit_final_model
 
-# Fit to whole training set, calculating variable importance if appropriate
 surv.model.fit <-
-  survivalBootstrap(
+  survivalFit(
     surv.predict,
-    COHORT.optimised[-test.set,], # Training set
-    COHORT.optimised[test.set,],  # Test set
-    model.type = model.type,
-    n.trees = n.trees,
+    COHORT.prep[-test.set,],
+    model.type = 'rfsrc',
+    n.trees = cv.performance[best.calibration.row1, 'n.trees'],
     split.rule = split.rule,
     n.threads = n.threads,
+    nsplit = cv.performance[best.calibration.row1, 'n.splits'],
+    nimpute = cv.performance[best.calibration.row1, 'n.imputations'],
+    na.action = 'na.impute'
+  )
+
+surv.model.fit.boot <-
+  survivalBootstrap(
+    surv.predict,
+    COHORT.prep[-test.set,], # Training set
+    COHORT.prep[test.set,],  # Test set
+    model.type = 'rfsrc',
+    n.trees = cv.performance[best.calibration.row1, 'n.trees'],
+    split.rule = split.rule,
+    n.threads = n.threads,
+    nsplit = cv.performance[best.calibration.row1, 'n.splits'],
+    nimpute = cv.performance[best.calibration.row1, 'n.imputations'],
+    na.action = 'na.impute',
     bootstraps = bootstraps
   )
 
 # Save the fit object
-saveRDS(surv.model.fit, paste0(output.filename.base, '-surv-model.rds'))
+saveRDS(
+  surv.model.fit.boot,
+  paste0(output.filename.base, '-surv-model-bootstraps.rds')
+)
 
 # Get C-indices for training and test sets
-surv.model.fit.coeffs <-  bootStats(surv.model.fit)
+surv.model.fit.coeffs <-  bootStats(surv.model.fit.boot)
+
+# Save them to the all-models comparison table
+varsToTable(
+  data.frame(
+    model = 'rfsrc',
+    imputation = FALSE,
+    discretised = FALSE,
+    c.index = surv.model.fit.coeffs['c.test', 'val'],
+    c.index.lower = surv.model.fit.coeffs['c.test', 'lower'],
+    c.index.upper = surv.model.fit.coeffs['c.test', 'upper'],
+    calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
+    calibration.score.lower =
+      surv.model.fit.coeffs['calibration.score', 'lower'],
+    calibration.score.upper =
+      surv.model.fit.coeffs['calibration.score', 'upper']
+  ),
+  performance.file,
+  index.cols = c('model', 'imputation', 'discretised')
+)
