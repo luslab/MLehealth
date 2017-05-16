@@ -241,8 +241,20 @@ if(model.type == 'ranger'){
 
 #+ fit_final_model
 
-# Fit to whole training set, calculating variable importance if appropriate
+# Fit to whole training set
 surv.model.fit <-
+  survivalFit(
+    surv.predict,
+    COHORT.optimised[-test.set,], # Training set
+    COHORT.optimised[test.set,],  # Test set
+    model.type = model.type,
+    n.trees = n.trees,
+    split.rule = split.rule,
+    n.threads = n.threads
+  )
+
+# Fir with bootstrapping to get better parameter estimates
+surv.model.fit.boot <-
   survivalBootstrap(
     surv.predict,
     COHORT.optimised[-test.set,], # Training set
@@ -255,7 +267,7 @@ surv.model.fit <-
   )
 
 # Save the fit object
-saveRDS(surv.model.fit, paste0(output.filename.base, '-surv-model.rds'))
+saveRDS(surv.model.fit.boot, paste0(output.filename.base, '-surv-model.rds'))
 
 # Get C-indices for training and test sets
-surv.model.fit.coeffs <-  bootStats(surv.model.fit)
+surv.model.fit.coeffs <-  bootStats(surv.model.fit.boot, uncertainty = '95ci')
