@@ -765,6 +765,24 @@ bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
   return(
     c(
       coef(fit),
+      c.train = cIndex(fit, data),
+      c.test = cIndex(fit, test.data),
+      calibration.score =
+        # Only the area, let's not return the standard error for now...
+        calibrationScore(calibrationTable(fit, test.data))$area
+    )
+  )
+}
+
+bootstrapFitSurvregMice <- function(formula, data, indices, test.data) {
+  # Wrapper function to pass a survreg fit with c-index calculations to boot.
+  
+  d <- data[indices,]
+  fit <- survreg(formula, data = d, dist = 'exponential')
+  # Return fit coefficients, c-index on training data, c-index on test data
+  return(
+    c(
+      fit$qbar, # Bombined coefficients from the imputed runs are stored here
       c.train = cIndex(fit, data, model.type = 'survreg'),
       c.test = cIndex(fit, test.data, model.type = 'survreg')
     )
@@ -781,20 +799,20 @@ bootstrapFitRfsrc <- function(formula, data, indices, n.trees, test.data, ...) {
   d <- data[indices,]
   fit <-  
     rfsrc(
-      surv.formula,
-      df,
+      formula,
+      data,
       ntree = n.trees,
       ...
     )
   
   # Check the model calibration on the test set
-  calibration.table <- calibrationTable(fit, test.data)
+  calibration.table <- calibrationTable(fit, test.data, ...)
   calibration.score <- calibrationScore(calibration.table, curve = FALSE)
   
   # Return fit coefficients, c-index on training data, c-index on test data
   return(
     c(
-      c.test = cIndex(fit, test.data),
+      c.test = cIndex(fit, test.data, ...),
       calibration.score = calibration.score$area
     )
   )
