@@ -49,7 +49,7 @@ source('../lib/rfsrc-cv-nsplit-bootstrap.R', chdir = TRUE)
 calibration.table <-
   calibrationTable(
     # Standard calibration options
-    surv.model.fit, COHORT.test,
+    surv.model.fit, COHORT.prep[test.set,],
     # Always need to specify NA imputation for rfsrc
     na.action = 'na.impute'
   )

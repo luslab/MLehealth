@@ -1,6 +1,6 @@
-bootstraps <- 200
+bootstraps <- 20
 split.rule <- 'logrank'
-n.threads <- 8
+n.threads <- 16
 
 # Cross-validation variables
 ns.splits <- 0:20
@@ -205,6 +205,10 @@ COHORT.prep <-
 # rfsrc can do on-the-fly imputation
 COHORT.prep <- prepCoxMissing(COHORT.prep, missingReplace = NA)
 
+# Add on those column names we just created
+surv.predict <-
+  c(surv.predict, names(COHORT.prep)[grepl('_missing', names(COHORT.prep))])
+
 #' ## Fit the final model
 #' 
 #' This may take some time, so we'll cache it if possible...
@@ -246,7 +250,7 @@ saveRDS(
 )
 
 # Get C-indices for training and test sets
-surv.model.fit.coeffs <-  bootStats(surv.model.fit.boot)
+surv.model.fit.coeffs <- bootStats(surv.model.fit.boot, uncertainty = '95ci')
 
 # Save them to the all-models comparison table
 varsToTable(
