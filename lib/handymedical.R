@@ -1103,10 +1103,8 @@ calibrationTable <- function(
   df$event <- NA
   # Event before risk.time
   df$event[df$surv_event & df$surv_time <= risk.time] <- TRUE
-  # Event after risk.time
-  df$event[df$surv_event & df$surv_time > risk.time] <- FALSE
-  # Censored after risk.time
-  df$event[!df$surv_event & df$surv_time > risk.time] <- FALSE
+  # Event after, whether censorship or not, means no event by risk.time
+  df$event[df$surv_time > risk.time] <- FALSE
   # Otherwise, censored before risk.time, leave as NA
   
   df[, c('risk', 'event')]
