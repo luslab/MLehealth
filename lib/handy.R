@@ -588,6 +588,29 @@ normalise <- function(x, FUN = sum) {
   x / FUN(x)
 }
 
+minGt <- function(x, gt = 0) {
+  # Return the minimum value of a vector greater than a value gt.
+  #
+  # Args:
+  #   x: A vector.
+  #   q: The value which this minimum value must be greater than, defaulting to
+  #      0 (which returns the minimum positive value).
+  #
+  # Returns:
+  #   The minimum positive value, eg c(-1, 0, 2, 4) would return 2.
+  min(x[x > gt])
+}
+
+minPositive <- function(x) {
+  # Return the minimum positive value of a vector. Wrapper for minGt.
+  #
+  # Args:
+  #       x: A vector.
+  # Returns:
+  #   The minimum positive value, eg c(-1, 0, 2, 4) would return 2.
+  minGt(x, 0)
+}
+
 ################################################################################
 ###  STATISTICS  ###############################################################
 ################################################################################
@@ -736,16 +759,18 @@ samplePlus <- function(x, ..., na.rm = TRUE, only.unique = FALSE) {
   #    ...: Other arguments to sample (ie size, replace, prob)
   #  na.rm: Whether or not to remove NAs. Default TRUE since otherwise why are
   #         you using this wrapper function?
+  #  only.unique: Sample from only the unique values of x?
   #
   # Returns:
   #   A sample from the vector (see sample documentation), without NAs if na.rm
-  #   is set to TRUE.
+  #   is set to TRUE, and only drawn from unique values of x is only.unique is
+  #   set to TRUE.
   
   if(na.rm) {
     x <- NArm(x)
   }
-  if(only.unique) {
-    x <- unique(x)
+  if(only.unique) { 
+    x <- unique(x) 
   }
   sample(x, ...)
 }
