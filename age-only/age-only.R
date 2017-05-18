@@ -69,8 +69,78 @@ age.only.c.index <-
 
 age.only.c.index.ci <- bootStats(age.only.c.index, uncertainty = '95ci')
 
-#' The c-index is `r age.only.c.index$val` +/- `r age.only.c.index$err`.
+#' The c-index is `r age.only.c.index$val`
+#' (`r age.only.c.index$lower`-`r age.only.c.index$upper`).
 #' 
+#' 
+#' ## Calibration
+#' 
+#' 
+#+ calibration
+
+km.by.age <-
+  survfit(
+    Surv(surv_time, surv_event) ~ age,
+    data = COHORT.use[-test.set,],
+    conf.type = "log-log"
+  )
+
+km.df <- data.frame(
+  age = rep(
+    # Chop off first 4 characters ('age=') and turn age into a number
+    as.numeric(substring(names(km.by.age$strata), 5)),
+    # Repeat each number as many times as there are patients that age
+    times = km.by.age$strata
+  ),
+  time = km.by.age$time,
+  surv = km.by.age$surv
+)
+
+risk.time <- 5
+surv.by.age <-
+  data.frame(
+    age = unique(km.df$age),
+    surv.at.t = NA
+  )
+
+for(age in unique(km.df$age)) {
+  # If anyone in that age bracket lived long enough for us to make a prediction...
+  if(max(km.df$time[km.df$age == age]) > risk.time) {
+    # Find the first event after that point, which gives us the survival
+    surv.by.age$surv.at.t[surv.by.age$age == age] <-
+      km.df$surv[
+        # The datapoint needs to be for the correct age of patient
+        km.df$age == age &
+        # And pick the time which is the smallest value greater than the time
+        # in which we're interested.
+        km.df$time ==
+          minGt(km.df$time[km.df$age == age], risk.time)
+      ]
+  }
+}
+
+# This is basically a kludged version of the calibrationTable() function for
+# this setting, which is so simple as not to merit functionalising
+calibration.table.precursor <-
+  merge(
+    COHORT.use[, c('age', 'surv_time', 'surv_event'), drop = FALSE],
+    surv.by.age[, c('age', 'surv.at.t')],
+    sort = FALSE, all.x = TRUE
+  )
+calibration.table <-
+  data.frame(
+    risk = 1 - calibration.table.precursor$surv.at.t,
+    event = NA
+  )
+# Event before risk.time
+calibration.table$event[calibration.table.precursor$surv_event & calibration.table.precursor$surv_time <= risk.time] <- TRUE
+# Event after risk.time, whether censored or not
+calibration.table$event[calibration.table.precursor$surv_time > risk.time] <- FALSE
+# Otherwise, censored before risk.time, leave as NA
+
+calibrationScore(sample.df(calibration.table, 30000))
+
+calibrationPlot(sample.df(calibration.table, 30000))
 
 varsToTable(
   data.frame(
