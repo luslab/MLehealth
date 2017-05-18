@@ -978,6 +978,68 @@ getRiskAtTime <- function(model.fit, df, risk.time = 5, ...) {
           MARGIN = 1
         )
       ]
+  } else if(modelType(model.fit) == 'survfit') {
+    # For now, survfit is just a Kaplan-Meier fit, and it only deals with a
+    # single variable for KM strata. For multiple strata, this would require a
+    # bit or parsing to turn names like 'age=93, gender=Men' into an n-column
+    # data frame.
+    varname <-  substring(
+      names(model.fit$strata)[1], 0,
+      # Position of the = sign
+      strPos('=', names(model.fit$strata)[1]) - 1
+    )
+    
+    km.df <- data.frame(
+      var = rep(
+        # Chop off characters before and including = (eg 'age=') and turn into a
+        # number (would also need generalising for non-numerics, eg factors)
+        as.numeric(
+          substring(
+            names(model.fit$strata),
+            # Position of the = sign
+            strPos('=', names(model.fit$strata)[1]) + 1
+          )
+        ),
+        # Repeat each number as many times as there are patients that age
+        times = model.fit$strata
+      ),
+      time = model.fit$time,
+      surv = model.fit$surv
+    )
+    
+    risk.by.var <-
+      data.frame(
+        var = unique(km.df$var),
+        risk = NA
+      )
+    
+    for(var in unique(km.df$var)) {
+      # If anyone with that variable value lived long enough for us to make a
+      # prediction...
+      if(max(km.df$time[km.df$var == var]) > risk.time) {
+        # Find the first event after that point, which gives us the survival,
+        # and do 1 - surv to get risk
+        risk.by.var$risk[risk.by.var$var == var] <- 1-
+          km.df$surv[
+            # The datapoint needs to be for the correct age of patient
+            km.df$var == var &
+              # And pick the time which is the smallest value greater than the
+              # time in which we're interested.
+              km.df$time ==
+              minGt(km.df$time[km.df$var == var], risk.time)
+            ]
+      }
+    }
+
+    # The predictions are then the risk for a given value of var
+    predictions <-
+      # join from pylr preserves row order
+      join(
+        # Slight kludge...make a data frame with one column called 'var' from
+        # the var (ie variable, depending on variable!) column of the data
+        data.frame(var = df[, varname]),
+        risk.by.var[, c('var', 'risk')]
+      )$risk
   }
   
   # However obtained, return the predictions
