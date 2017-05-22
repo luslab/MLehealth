@@ -18,7 +18,6 @@ requirePlus(
   'ranger',
   'randomForestSRC',
   'e1071',
-  'Rgraphviz',
   'data.table',
   'boot',
   install = FALSE
