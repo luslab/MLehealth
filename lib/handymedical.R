@@ -881,12 +881,14 @@ bootMIStats <- function(boot.mi, uncertainty = '95ci', transform = identity) {
     )
   } else if(uncertainty == '95ci') {
     ci <-
-      apply(transform(boot.mi.combined), 2, quantile, probs = c(0.025, 0.975))
+      apply(
+        transform(boot.mi.combined), 2, quantile, probs = c(0.025, 0.5, 0.975)
+      )
     return(
       data.frame(
-        val  = apply(transform(boot.mi.combined), 2, mean),
+        val  = t(ci)[, 2],
         lower = t(ci)[, 1],
-        upper = t(ci)[, 2],
+        upper = t(ci)[, 3],
         row.names = names(boot.mi[[1]]$t0)
       )
     )
