@@ -86,18 +86,24 @@ if(!is.na(random.seed)) {
 source('../lib/handymedical.R', chdir = TRUE)
 
 # Define a function of extra non-general prep to be done on this dataset
-caliberExtraPrep <- function(df) {
+caliberExclude <- function(df) {
   df <-
     df[
-        # remove negative times to death
-        df$surv_time > 0 &
+      # remove negative times to death
+      df$surv_time > 0 &
         # remove patients who should be excluded
         !df$exclude
       ,
       ]
   # Remove the exclude column, which we don't need any more
   df$exclude <- NULL
+  
+  df
+}
 
+caliberExtraPrep <- function(df) {
+  df <- caliberExclude(df)
+  
   # Create most_deprived, as defined in the paper: the bottom 20%
   df$most_deprived <- df$imd_score > quantile(df$imd_score, 0.8, na.rm = TRUE)
   df$most_deprived <- factorNAfix(factor(df$most_deprived), NAval = 'missing')
