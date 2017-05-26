@@ -93,36 +93,82 @@ COHORT.prep <-
   )
 n.data <- nrow(COHORT.prep)
 
-time.start <- handyTimer()
-surv.model.fit <-
-  survivalFit(
-    surv.predict,
-    COHORT.prep[-test.set,],
-    model.type = model.type,
-    n.trees = 2000,
-    n.threads = 16,
-    split.rule = 'logrank',
-    na.action = 'na.impute',
-    nimpute = 3,
-    nsplit = 8
-  )
-time.fit <- handyTimer(time.start)
-
-saveRDS(surv.model.fit, '../../output/rf-bigdata-try1-fit.rds')
+if(!file.exists('../../output/rf-bigdata-try1-fit.rds')) {
+  time.start <- handyTimer()
+  surv.model.fit <-
+    survivalFit(
+      surv.predict,
+      COHORT.prep[-test.set,],
+      model.type = model.type,
+      n.trees = 2000,
+      n.threads = 16,
+      split.rule = 'logrank',
+      na.action = 'na.impute',
+      nimpute = 3,
+      nsplit = 8
+    )
+  time.fit <- handyTimer(time.start)
+  
+  saveRDS(surv.model.fit, '../../output/rf-bigdata-try1-fit.rds')
+} else {
+  surv.model.fit <- readRDS('../../output/rf-bigdata-try1-fit.rds')
+  time.fit <- NA
+}
 
 time.start <- handyTimer()
 c.index <- cIndex(surv.model.fit, COHORT.prep[test.set,], na.action = 'na.impute')
 time.c.index <- handyTimer(time.start)
 
-c.index2 <- cIndex(surv.model.fit, COHORT.prep[test.set,], na.action = 'na.impute', nimpute = 3)
-
 #' ## Results
 #'
 #' Here's the fit:
+
 print(surv.model.fit)
 
-#' C-index is `r print(round(c.index, 4))` without the nimpute argument,
-#' `r print(round(c.index2, 4))` with.
+#' C-index is `r round(c.index, 4)`.
 #' 
-#' It took `r print(round(time.fit/60, 1))` minutes to fit the model and
-#' `r print(round(time.c.index/60, 1))` minutes to evaluate the C-index on the test set.
+#' It took `r round(time.fit/60, 1)` minutes to fit the model and
+#' `r round(time.c.index/60, 1)` minutes to evaluate the C-index on the test set.
+#' 
+#' ## Variable importance
+#' 
+#' Can this approach recover the most important variables? Let's see!
+
+variable.importance <-
+  generalVarImp(
+    surv.model.fit,
+    COHORT.prep[test.set,],
+    risk.time = 5,
+    tod.round = 0.1,
+    na.action = 'na.impute'
+  )
+
+write.csv(variable.importance, '../../output/rf-bigdata-try1-varimp.csv')
+
+require(xtable)
+
+#+ varimp_table, results='asis'
+
+print(
+  xtable(
+    variable.importance[
+      order(variable.importance$var.imp, decreasing = TRUE)[1:20],
+    ],
+    digits = c(0,3)
+  ),
+  type = 'html',
+  include.rownames = FALSE
+)
+
+#' ## Calibration
+#' 
+#+ calibration
+
+calibration.table <- calibrationTable(surv.model.fit, COHORT.prep[test.set, ])
+
+calibration.score <- calibrationScore(calibration.table)
+
+calibrationPlot(calibration.table)
+
+#' Calibration score is is `r round(calibration.score$area, 4)` +/-
+#' `r round(calibration.score$se, 4)`.
