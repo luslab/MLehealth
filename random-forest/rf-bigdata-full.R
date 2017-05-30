@@ -2,12 +2,14 @@
 #' 
 #' Having extracted a huge number of variables, let's find out what we got...
 
+output.base <- '../../output/rf-bigdata-try3'
+
 data.filename.big <- '../../data/cohort-datadriven-02.csv'
 model.type <- 'rfsrc'
 n.data <- NA
 
-surv.predict.old <- c('age', 'smokstatus', 'imd_score')
-untransformed.vars <- c('time_death', 'endpoint_death', 'imd_score', 'exclude')
+surv.predict.old <- c('age', 'smokstatus', 'imd_score', 'gender')
+untransformed.vars <- c('time_death', 'endpoint_death', 'exclude')
 exclude.vars <-
   c(
     # Entity type 4 is smoking status, which we already have
@@ -23,58 +25,9 @@ source('../lib/shared.R')
 
 COHORT <- fread(data.filename.big)
 
-summary2 <- function(x) {
-  if('data.frame' %in% class(x)) {
-    lapply(x, summary2)
-  } else {
-    if(length(unique(x)) < 30) {
-      if(length(unique(x)) < 10) {
-        return(round(c(table(x))/length(x), 3)*100)
-      } else {
-        summ <- sort(table(x), decreasing = TRUE)
-        return(
-            round(
-              c(
-                summ[1:5],
-                other = sum(summ[6:length(summ)]),
-                missing = sum(is.na(x))
-              # divide all by the length and turn into %
-              )/length(x), 3)*100
-        )
-      }
-    } else {
-      return(
-        c(
-          min = min(x, na.rm = TRUE),
-          max = max(x, na.rm = TRUE),
-          median = median(x, na.rm = TRUE),
-          missing = round(sum(is.na(x))/length(x), 3)*100
-        )
-      )
-    }
-  }
-}
-
 percentMissing <- function(x) {
   sum(is.na(x))/length(x) * 100
 }
-
-startsWithAny <- function(x, prefixes) {
-  apply(
-    # sapply startsWith over all prefixes, giving a table of logicals
-    sapply(
-      prefixes,
-      function(prefix) {
-        startsWith(x, prefix)
-      }
-    ),
-    # ...then, apply a massive logical or over the rows of that table
-    MARGIN = 1, FUN = any
-  )
-}
-
-
-COHORT.summary <- summary2(COHORT)
 
 missingness <- sapply(COHORT, percentMissing)
 
@@ -143,3 +96,45 @@ for (j in prescriptions.vars) {
 COHORT.bigdata$clinical.values.5_data1 <-
   factorNAfix(factor(COHORT.bigdata$clinical.values.5_data1), NAval = 'missing')
 
+# Both gender and smokstatus are factors...fix that
+COHORT.bigdata$gender <- factor(COHORT.bigdata$gender)
+COHORT.bigdata$smokstatus <-
+  factorNAfix(factor(COHORT.bigdata$smokstatus), NAval = 'missing')
+
+# Exclude invalid patients
+COHORT.bigdata <- COHORT.bigdata[!COHORT.bigdata$exclude]
+COHORT.bigdata$exclude <- NULL
+
+COHORT.bigdata <-
+  prepSurvCol(data.frame(COHORT.bigdata), 'time_death', 'endpoint_death', 'Death')
+
+test.set <- testSetIndices(COHORT.bigdata, random.seed = 78361)
+
+surv.predict <- c(surv.predict.old, names(top.bigdata))
+
+fit.filename <- paste0(output.base, '-fit.rds')
+
+if(!file.exists(fit.filename)) {
+  time.start <- handyTimer()
+  surv.model.fit <-
+    survivalFit(
+      surv.predict,
+      COHORT.bigdata[-test.set,],
+      model.type = model.type,
+      n.trees = 2000,
+      n.threads = 16,
+      split.rule = 'logrank',
+      na.action = 'na.impute',
+      nimpute = 3,
+      nsplit = 8,
+      mtry = 30
+    )
+  time.fit <- handyTimer(time.start)
+  
+  saveRDS(surv.model.fit, fit.filename)
+} else {
+  surv.model.fit <- readRDS(fit.filename)
+  time.fit <- NA
+}
+
+cIndex(surv.model.fit, COHORT.bigdata[test.set,], na.action = 'na.impute')
