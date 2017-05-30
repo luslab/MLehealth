@@ -1193,6 +1193,48 @@ calibrationScore <- function(
       se = curve.area.se
     )
   }
-  
+}
 
+testSetIndices <- function(df, test.fraction = 1/3, random.seed = NA) {
+  # Get indices for the test set in a data frame, with a random seed to make the
+  # process deterministic if requested.
+  
+  n.data <- nrow(df)
+  if(!is.na(random.seed)) set.seed(random.seed)
+  
+  sample.int(n.data, round(n.data * test.fraction))
+}
+
+summary2 <- function(x) {
+  # Practical summary function for summarising medical records data columns
+  # depending on number of unique values...
+  if('data.frame' %in% class(x)) {
+    lapply(x, summary2)
+  } else {
+    if(length(unique(x)) < 30) {
+      if(length(unique(x)) < 10) {
+        return(round(c(table(x))/length(x), 3)*100)
+      } else {
+        summ <- sort(table(x), decreasing = TRUE)
+        return(
+          round(
+            c(
+              summ[1:5],
+              other = sum(summ[6:length(summ)]),
+              missing = sum(is.na(x))
+              # divide all by the length and turn into %
+            )/length(x), 3)*100
+        )
+      }
+    } else {
+      return(
+        c(
+          min = min(x, na.rm = TRUE),
+          max = max(x, na.rm = TRUE),
+          median = median(x, na.rm = TRUE),
+          missing = round(sum(is.na(x))/length(x), 3)*100
+        )
+      )
+    }
+  }
 }

@@ -163,6 +163,29 @@ strPos <- function(..., fixed = TRUE) {
   regexpr(..., fixed = fixed)[1]
 }
 
+startsWithAny <- function(x, prefixes) {
+  # Function extending startsWith for use with a vector of many prefixes.
+  #
+  # Args:
+  #         x: Vector of characters whose starts will be examined.
+  #  prefixes: Vector of characters which may be those starts.
+  #
+  # Returns:
+  #      A logical vector denoting whether a given string in x starts with any
+  #      of the prefixes provided.
+  apply(
+    # sapply startsWith over all prefixes, giving a table of logicals
+    sapply(
+      prefixes,
+      function(prefix) {
+        startsWith(x, prefix)
+      }
+    ),
+    # ...then, apply a massive logical 'or' over the rows of that table
+    MARGIN = 1, FUN = any
+  )
+}
+
 randomString <- function(l, characters = letters, disallowed = NULL) {
   # Generate a random string, with optional excision of disallowed sequences.
   #
