@@ -1,8 +1,10 @@
 #' # Summarising big data
 #' 
 #' Having extracted a huge number of variables, let's find out what we got...
+#' 
+#+ data_setup
 
-output.base <- '../../output/rf-bigdata-try3'
+output.filename.base <- '../../output/rf-bigdata-try4'
 
 data.filename.big <- '../../data/cohort-datadriven-02.csv'
 model.type <- 'rfsrc'
@@ -112,29 +114,50 @@ test.set <- testSetIndices(COHORT.bigdata, random.seed = 78361)
 
 surv.predict <- c(surv.predict.old, names(top.bigdata))
 
-fit.filename <- paste0(output.base, '-fit.rds')
 
-if(!file.exists(fit.filename)) {
-  time.start <- handyTimer()
-  surv.model.fit <-
-    survivalFit(
-      surv.predict,
-      COHORT.bigdata[-test.set,],
-      model.type = model.type,
-      n.trees = 2000,
-      n.threads = 16,
-      split.rule = 'logrank',
-      na.action = 'na.impute',
-      nimpute = 3,
-      nsplit = 8,
-      mtry = 30
-    )
-  time.fit <- handyTimer(time.start)
-  
-  saveRDS(surv.model.fit, fit.filename)
-} else {
-  surv.model.fit <- readRDS(fit.filename)
-  time.fit <- NA
-}
+source('../lib/rfsrc-cv-mtry-nsplit-logical.R')
 
-cIndex(surv.model.fit, COHORT.bigdata[test.set,], na.action = 'na.impute')
+
+#' # Results
+#' 
+#' 
+#' ## Performance
+#' 
+#' ### Discrimination
+#' 
+#' C-index is **`r round(surv.model.fit.coeffs['c.test', 'val'], 3)` +/-
+#' `r round(surv.model.fit.coeffs['c.test', 'err'], 3)`** on the held-out test
+#' set.
+#' 
+#' ### Calibration
+#' 
+#' Does the model predict realistic probabilities of an event?
+#' 
+#+ calibration_plot
+
+calibration.table <-
+  calibrationTable(
+    # Standard calibration options
+    surv.model.fit, COHORT.prep[test.set,],
+    # Always need to specify NA imputation for rfsrc
+    na.action = 'na.impute'
+  )
+
+calibration.score <- calibrationScore(calibration.table)
+
+calibrationPlot(calibration.table)
+
+#' The area between the calibration curve and the diagonal is 
+#' **`r round(calibration.score['area'], 3)`** +/-
+#' **`r round(calibration.score['se'], 3)`**.
+#' 
+#' ## Model fit
+#' 
+#+ resulting_fit
+
+print(surv.model.fit)
+
+#' ## Variable importance
+#' 
+
+print(importance(surv.model.fit))
