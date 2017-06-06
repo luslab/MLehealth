@@ -115,9 +115,6 @@ best.calibration <-
 best.calibration.row1 <-
   min(which(cv.performance$calibration == best.calibration))
 
-# Prep the data to fit and test with
-COHORT.test <- COHORT.bigdata[test.set,]
-
 #' ## Fit the final model
 #' 
 #' This may take some time, so we'll cache it if possible...
@@ -127,7 +124,7 @@ COHORT.test <- COHORT.bigdata[test.set,]
 surv.model.fit <-
   survivalFit(
     surv.predict,
-    COHORT.prep[-test.set,],
+    COHORT.bigdata[-test.set,],
     model.type = 'rfsrc',
     n.trees = n.trees.final,
     split.rule = split.rule,
@@ -148,8 +145,8 @@ saveRDS(
 surv.model.fit.boot <-
   survivalBootstrap(
     surv.predict,
-    COHORT.prep[-test.set,], # Training set
-    COHORT.prep[test.set,],  # Test set
+    COHORT.bigdata[-test.set,], # Training set
+    COHORT.bigdata[test.set,],  # Test set
     model.type = 'rfsrc',
     n.trees = n.trees.final,
     split.rule = split.rule,
