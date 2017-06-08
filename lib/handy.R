@@ -186,6 +186,22 @@ startsWithAny <- function(x, prefixes) {
   )
 }
 
+textAfter <- function(x, prefix) {
+  # Find and return text from strings starting with a prefix, after that prefix.
+  #
+  # Args:
+  #       x: Vector of characters to examine.
+  #  prefix: Single character string to search for and then discard where
+  #          present. Accepts a vector as startsWith, but this would be a
+  #          slightly strange use-case.
+  #
+  # Returns:
+  #      A character vector of pieces of text which occur after the prefix
+  #      specified. eg textAfter(c('a1', 'a2', 'b1'), 'a') would return
+  #      c('1', '2').
+  substr(x[startsWith(x, prefix)], nchar(prefix) + 1, nchar(x))
+}
+
 randomString <- function(l, characters = letters, disallowed = NULL) {
   # Generate a random string, with optional excision of disallowed sequences.
   #

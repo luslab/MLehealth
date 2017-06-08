@@ -4,7 +4,7 @@ requirePlus(
   'foreach',
   #'CALIBERdatamanage',
   #'CALIBERcodelists',
-  #'CALIBERlookups',
+  'CALIBERlookups',
   'plyr',
   'dplyr',
   'ggplot2',
@@ -1237,4 +1237,85 @@ summary2 <- function(x) {
       )
     }
   }
+}
+
+lookUpDescriptions <- function(df) {
+  # Create blank columns for which dictionary a given variable comes from, its
+  # code in that dictionary, and a human-readable description looked up from the
+  # CALIBER tables
+  df$code <- NA
+  df$description <- NA
+  
+  # Look up ICD and OPCS codes
+  relevant.rows <- startsWith(df$var, 'hes.icd.')
+  df$code[relevant.rows] <- textAfter(df$var, 'hes.icd.')
+  for(i in which(relevant.rows)) {
+    
+    # Some of these don't work, so add in an if statement to catch the error
+    if(
+      length(CALIBER_DICT[dict == 'icd10' & code == df$code[i], term]) > 0
+    ){
+      df$description[i] <-
+        CALIBER_DICT[dict == 'icd10' & code == df$code[i], term]
+    } else {
+      df$description[i] <- 'ERROR: ICD not matched'
+    }
+  }
+  
+  relevant.rows <- startsWith(df$var, 'hes.opcs.')
+  df$code[relevant.rows] <- textAfter(df$var, 'hes.opcs.')
+  for(i in which(relevant.rows)) {
+    df$description[i] <-
+      CALIBER_DICT[dict == 'opcs' & code == df$code[i], term]
+  }
+  
+  relevant.rows <- startsWith(df$var, 'clinical.history.')
+  df$code[relevant.rows] <- textAfter(df$var, 'clinical.history.')
+  for(i in which(relevant.rows)) {
+    # Some of these don't work, so add in an if statement to catch the error
+    if(
+      length(CALIBER_DICT[dict == 'read' & medcode == df$code[i], term]) > 0
+    ){
+      df$description[i] <-
+        CALIBER_DICT[dict == 'read' & medcode == df$code[i], term]
+    } else {
+      df$description[i] <- 'ERROR: medcode not matched'
+    }
+  }
+  
+  relevant.rows <- startsWith(df$var, 'clinical.values.')
+  df$code[relevant.rows] <- textAfter(df$var, 'clinical.values.')
+  for(i in which(relevant.rows)) {
+    testtype.datatype <- strsplit(df$code[i], '_', fixed =TRUE)[[1]]
+    df$description[i] <-
+      paste0(
+        CALIBER_ENTITY[enttype == testtype.datatype[1], description],
+        ', ',
+        CALIBER_ENTITY[enttype == testtype.datatype[1], testtype.datatype[2], with = FALSE]
+      )
+  }
+  
+  relevant.rows <- startsWith(df$var, 'bnf.')
+  df$code[relevant.rows] <- textAfter(df$var, 'bnf.')
+  for(i in which(relevant.rows)) {
+    # Some of these don't work, so add in an if statement to catch the error
+    if(
+      length(CALIBER_BNFCODES[bnfcode == df$code[i], bnf]) > 0
+    ){
+      df$description[i] <-
+        CALIBER_BNFCODES[bnfcode == df$code[i], bnf]
+    } else {
+      df$description[i] <- 'ERROR: BNF code not matched'
+    }
+  }
+  
+  relevant.rows <- startsWith(df$var, 'tests.enttype.data3.')
+  df$code[relevant.rows] <- textAfter(df$var, 'tests.enttype.data3.')
+  for(i in which(relevant.rows)) {
+    testtype.datatype <- strsplit(df$code[i], '_', fixed =TRUE)[[1]]
+    df$description[i] <-
+      CALIBER_ENTITY[enttype == testtype.datatype[1], description]
+  }
+  
+  df
 }
