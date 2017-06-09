@@ -1,10 +1,21 @@
+#+ knitr_setup, include = FALSE
+
+# Whether to cache the intensive code sections. Set to FALSE to recalculate
+# everything afresh.
+cacheoption <- TRUE
+# Disable lazy caching globally, because it fails for large objects, and all the
+# objects we wish to cache are large...
+opts_chunk$set(cache.lazy = FALSE)
+
 #' # Summarising big data
 #' 
 #' Having extracted a huge number of variables, let's find out what we got...
 #' 
+#' ## Data set-up
+#' 
 #+ data_setup
 
-output.filename.base <- '../../output/rf-bigdata-try5'
+output.filename.base <- '../../output/rf-bigdata-try6-top100'
 
 data.filename.big <- '../../data/cohort-datadriven-02.csv'
 model.type <- 'rfsrc'
@@ -44,8 +55,6 @@ percentMissing <- function(x) {
 
 missingness <- sapply(COHORT, percentMissing)
 
-
-
 bigdata.prefixes <-
   c(
     'hes.icd.',
@@ -66,8 +75,10 @@ bigdata.columns <-
     )
   ]
 
+# If n.vars was not set as NA, then thin out the variables to that number
 if(!is.na(n.vars)) {
-  bigdata.columns <- sort(missingness[bigdata.columns])[1:n.vars]
+  bigdata.columns <-
+    bigdata.columns[order(missingness[bigdata.columns])[1:n.vars]]
 }
 
 COHORT.bigdata <-
@@ -130,13 +141,18 @@ test.set <- testSetIndices(COHORT.bigdata, random.seed = 78361)
 
 surv.predict <- c(surv.predict.old, bigdata.columns)
 
+#' # Fitting
+#' 
+#' Let's fit the model...
+#+ rf_bigdata_fit, cache=cacheoption
+
 time.start <- handyTimer()
 surv.model.fit <-
   survivalFit(
     surv.predict,
     COHORT.bigdata[-test.set,],
     model.type = 'rfsrc',
-    n.trees = 16,
+    n.trees = 2000,
     split.rule = split.rule,
     n.threads = 16,
     nimpute = 3,
@@ -194,8 +210,8 @@ calibration.score <- calibrationScore(calibration.table)
 calibrationPlot(calibration.table)
 
 #' The area between the calibration curve and the diagonal is 
-#' **`r round(calibration.score['area'], 3)`** +/-
-#' **`r round(calibration.score['se'], 3)`**.
+#' **`r round(calibration.score[['area']], 3)`** +/-
+#' **`r round(calibration.score[['se']], 3)`**.
 #' 
 #' ## Variable importance
 #' 
@@ -203,16 +219,21 @@ calibrationPlot(calibration.table)
 vimp.df <-
   data.frame(
     var = names(var.imp$importance),
-    imp = normalise(var.imp$importance, max)
+    imp = normalise(var.imp$importance, max),
+    stringsAsFactors = FALSE
   )
 
+
 vimp.df <- lookUpDescriptions(vimp.df)
+
+vimp.df$missingness <- missingness[vimp.df$var]
 
 #' What are the most important variables?
 
 print(
   head(
-    vimp.df[order(vimp.df$imp, decreasing = TRUE), c('description', 'imp')],
+    vimp.df[order(vimp.df$imp, decreasing = TRUE),
+            c('imp', 'description', 'missingness')],
     20
   )
 )
@@ -221,8 +242,14 @@ print(
 #' 
 #' Plot the partial effects of the top 10 most significant variables
 
+# Add in a column for rounded time to death because that's the y-variable here
+COHORT.bigdata$surv_time_round <- round_any(COHORT.bigdata$surv_time, 0.1)
+
 for(variable in vimp.df$var[order(vimp.df$imp, decreasing = TRUE)[1:10]]) {
-  risk.by.variable <- generalEffectDf(surv.model.fit, COHORT.bigdata, variable)
+  risk.by.variable <-
+    generalEffectDf(
+      surv.model.fit, COHORT.bigdata, variable, na.action='na.impute'
+    )
   
   # Get the mean of the normalised risk for every value of the variable
   risk.aggregated <-
@@ -233,7 +260,7 @@ for(variable in vimp.df$var[order(vimp.df$imp, decreasing = TRUE)[1:10]]) {
   
   # work out the limits on the x-axis by taking the 1st and 99th percentiles
   x.axis.limits <-
-    quantile(COHORT.full[, variable], c(0.01, 0.99), na.rm = TRUE)
+    quantile(COHORT.bigdata[, variable], c(0.01, 0.99), na.rm = TRUE)
   
   print(
     ggplot(risk.by.variable, aes_string(x = variable, y = 'risk.normalised')) +
