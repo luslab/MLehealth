@@ -199,7 +199,8 @@ textAfter <- function(x, prefix) {
   #      A character vector of pieces of text which occur after the prefix
   #      specified. eg textAfter(c('a1', 'a2', 'b1'), 'a') would return
   #      c('1', '2').
-  substr(x[startsWith(x, prefix)], nchar(prefix) + 1, nchar(x))
+  i <- startsWith(x, prefix)
+  substr(x[i], nchar(prefix) + 1, nchar(x[i]))
 }
 
 randomString <- function(l, characters = letters, disallowed = NULL) {
