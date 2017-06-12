@@ -1057,7 +1057,7 @@ generalEffectDf <-
     n.values <- min(max.values, length(unique(df[,variable])))
     
     # Take a sample of df, but repeat each one of those samples n.values times
-    df.sample <- df[rep(sample(test.set, n.patients), each = n.values),]
+    df.sample <- df[rep(sample(1:nrow(df), n.patients), each = n.values),]
     # Give each value from the original df an id, so we can keep track
     df.sample$id <- rep(1:n.patients, each = n.values)
     
