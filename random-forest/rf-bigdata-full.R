@@ -245,27 +245,83 @@ print(
 # Add in a column for rounded time to death because that's the y-variable here
 COHORT.bigdata$surv_time_round <- round_any(COHORT.bigdata$surv_time, 0.1)
 
+risk.by.logical <- data.frame()
+
 for(variable in vimp.df$var[order(vimp.df$imp, decreasing = TRUE)[1:10]]) {
   risk.by.variable <-
-    generalEffectDf(
-      surv.model.fit, COHORT.bigdata, variable, na.action='na.impute'
+    partialEffectTable(
+      surv.model.fit, COHORT.bigdata[-test.set, ], variable,
+      na.action = 'na.impute'
     )
+  
+  if(is.logical(risk.by.variable[, variable])) {
+    # If it's a logical value, then make FALSE the baseline and just give values
+    # when true, and then append this data frame into a larger one storing all
+    # the values from logical variables
+    
+    # First, get average responses on a per-variable basis
+    
+    
+    risk.by.logical <-
+      rbind(
+        risk.by.logical,
+        data.frame(
+          # Store variable name
+          variable,
+          # And ratio of values associated with TRUEs and FALSEs
+          tf.ratio =
+            # Every 2nd one is a TRUE, because the values are sorted 
+            risk.by.variable[
+              seq.int(2, nrow(risk.by.variable), 2), 'risk.normalised'
+              ] /
+            # Conversely, all the odd rows are FALSE
+            risk.by.variable[
+              seq.int(1,nrow(risk.by.variable) - 1, 2), 'risk.normalised'
+              ]
+        )
+      )
+  }
   
   # Get the mean of the normalised risk for every value of the variable
   risk.aggregated <-
     aggregate(
       as.formula(paste0('risk.normalised ~ ', variable)),
-      risk.by.variable, mean
+      risk.by.variable, median
     )
   
-  # work out the limits on the x-axis by taking the 1st and 99th percentiles
-  x.axis.limits <-
-    quantile(COHORT.bigdata[, variable], c(0.01, 0.99), na.rm = TRUE)
+  if(is.factor(risk.by.variable[, variable])) {
+    # If it's a factor, draw a bar chart for the per-level partial effects
+    print(
+      ggplot(risk.by.variable, aes_string(x = variable, y = 'risk.normalised')) +
+        geom_point(alpha = 0.01, position = position_jitter(w = 0.8, h = 0)) +
+        geom_bar(data = risk.aggregated, colour = 'blue')
+    )
+  } else if(is.numeric(risk.by.variable[, variable])) {
+    # If it's a number, draw a line plot across the range of values
+    
+    
+    # work out the limits on the x-axis by taking the 1st and 99th percentiles
+    x.axis.limits <-
+      quantile(COHORT.bigdata[, variable], c(0.01, 0.99), na.rm = TRUE)
+    print(
+      ggplot(risk.by.variable, aes_string(x = variable, y = 'risk.normalised')) +
+        geom_line(alpha=0.01, aes(group = id)) +
+        geom_line(data = risk.aggregated, colour = 'blue') +
+        coord_cartesian(xlim = c(x.axis.limits))
+    )
+  }
+}
+
+if(nrow(risk.by.logical) > 0) {
+  # If there were some logical variables in there, let's plot them all on one
+  # bar plot, much like the factor plot from before
+  
+  # Get the averaged risk for each variable
+  risk.aggregated <- aggregate(tf.ratio ~ variable, risk.by.logical, median)
   
   print(
-    ggplot(risk.by.variable, aes_string(x = variable, y = 'risk.normalised')) +
-      geom_line(alpha=0.01, aes(group = id)) +
-      geom_line(data = risk.aggregated, colour = 'blue') +
-      coord_cartesian(xlim = c(x.axis.limits))
+    ggplot(risk.by.logical, aes(x = variable, y = tf.ratio)) +
+      geom_violin(draw_quantiles = c(0.25, 0.5, 0.75)) +
+      coord_cartesian(ylim = c(0, 2))
   )
 }
