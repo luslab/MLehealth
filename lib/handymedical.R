@@ -1047,14 +1047,14 @@ getRiskAtTime <- function(model.fit, df, risk.time = 5, ...) {
   predictions
 }
 
-generalEffectDf <-
+partialEffectTable <-
   function(
     model.fit, df, variable, n.patients = 1000, max.values = 200,
     risk.time = 5, ...
   ) {
-    # The number of values we look at will be either max.values, or the number of
-    # unique values if that's lower
-    n.values <- min(max.values, length(unique(df[,variable])))
+    # The number of values we look at will be either max.values, or the number
+    # of unique values if that's lower. Remove NAs because they cause errors.
+    n.values <- min(max.values, length(NArm(unique(df[,variable]))))
     
     # Take a sample of df, but repeat each one of those samples n.values times
     df.sample <- df[rep(sample(1:nrow(df), n.patients), each = n.values),]
@@ -1065,7 +1065,7 @@ generalEffectDf <-
     # value of the variable we're interested in exploring
     df.sample[, variable] <-
       sort(
-        samplePlus(df[, variable], n.values, na.rm = FALSE, only.unique = TRUE)
+        samplePlus(df[, variable], n.values, na.rm = TRUE, only.unique = TRUE)
       )
     
     # Use the model to make predictions
@@ -1078,7 +1078,7 @@ generalEffectDf <-
       df.sample %>%
         group_by(id) %>%
         mutate(risk.normalised = risk/mean(risk))
-    )
+    )[, c('id', variable, 'risk.normalised')] # discard all unnecessary columns
   }
 
 calibrationTable <- function(
