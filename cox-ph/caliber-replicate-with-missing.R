@@ -41,17 +41,18 @@ n.data <- NA # This is of full dataset...further rows may be excluded in prep
 endpoint <- 'death'
 
 old.coefficients.filename <- 'rapsomaniki-cox-values-from-paper.csv'
-new.coefficients.filename <-
-  '../../output/caliber-replicate-with-missing-survreg-bootstrap-coeffs-2.csv'
-compare.coefficients.filename <-
-  '../../output/caliber-replicate-with-missing-survreg-bootstrap-2.csv'
-cox.var.imp.perm.filename <-
-  '../../output/caliber-replicate-with-missing-survreg-bootstrap-var-imp-perm-2.csv'
-model.filename <-
-  '../../output/caliber-replicate-with-missing-model-survreg-bootstrap-2.rds'
+
+output.filename.base <- '../../output/caliber-replicate-with-missing-survreg-2'
 
 bootstraps <- 100
 n.threads <- 8
+
+# Create a few filenames from the base
+new.coefficients.filename <- paste0(output.filename.base, '-coeffs-2.csv')
+compare.coefficients.filename <-
+  paste0(output.filename.base, '-bootstrap-2.csv')
+cox.var.imp.perm.filename <- paste0(output.filename.base, '-var-imp-perm-2.csv')
+model.filename <- paste0(output.filename.base, '-model-bootstrap.rds')
 
 #' ## Setup
 
@@ -613,6 +614,11 @@ for(quantity in surv.predict) {
   }
 }
 
+# Save the results
+write.csv(risk.dist.by.var, paste0(output.filename.base, '-risk-violins.csv'))
+write.csv(risk.cats, paste0(output.filename.base, '-risk-cats.csv'))
+
+# Plot the results
 ggplot() +
   # First, and therefore at the bottom, draw the reference line at risk = 1
   geom_hline(yintercept = 1) +
