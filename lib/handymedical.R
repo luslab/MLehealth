@@ -837,12 +837,12 @@ bootStats <- function(bootfit, uncertainty = 'sd', transform = identity) {
       )
     )
   } else if(uncertainty == '95ci') {
-    ci <- apply(transform(bootfit$t), 2, quantile, probs = c(0.025, 0.975))
+    ci <- apply(transform(bootfit$t), 2, quantile, probs = c(0.025, 0.5, 0.975))
     return(
       data.frame(
-        val  = transform(bootfit$t0),
+        val  = t(ci)[, 2],
         lower = t(ci)[, 1],
-        upper = t(ci)[, 2]
+        upper = t(ci)[, 3]
       )
     )
   } else {
