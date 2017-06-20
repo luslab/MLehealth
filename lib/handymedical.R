@@ -1139,8 +1139,15 @@ calibrationPlot <- function(df) {
 }
 
 calibrationScore <- function(
-  calibration.table, risk.breaks = seq(0, 1, 0.001), curve = FALSE
+  calibration.table, risk.breaks = seq(0, 1, 0.001), curve = FALSE,
+  extremes = TRUE
   ) {
+  #
+  # extremes: If set to true, this assumes predictions of 0 below 0.5, and 1
+  # above 0.5, providing a worst-case estimate for cases when the prediction
+  # model only provides predictions within a narrower range. This allows such
+  # models to be fairly compared to others with broader predictive values.
+  #
   # * Could rewrite this with the integrate built-in function
   # * Not totally sure about the standard error here...I assume just integrating
   #   the uncertainty region will result in an overestimate?
