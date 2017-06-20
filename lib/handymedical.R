@@ -412,11 +412,19 @@ cIndex <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
   )
 }
 
-generalVarImp <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
+generalVarImp <-
+  function(
+    model.fit, df, vars = NA, risk.time = 5, tod.round = 0.1, ...
+    ) {
   baseline.c.index <- cIndex(model.fit, df, risk.time, tod.round, ...)
   
+  # If no variables were passed, let's do it on all of the variables
+  if(isExactlyNA(vars)) {
+    vars <- names(model.fit$xvar)
+  }
+  
   var.imp <- data.frame(
-     var = names(df), # need to somehow exclude outcome vars
+     var = vars,
      var.imp = NA,
      stringsAsFactors = FALSE
   )
