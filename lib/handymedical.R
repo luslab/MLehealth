@@ -1354,3 +1354,9 @@ lookUpDescriptions <- function(df) {
   
   df
 }
+
+getVarNums <- function(x, frac = 0.2) {
+  # Number of iterations until there's only one variable left
+  n <- -ceil(log(x)/log(1 - frac))
+  unique(round(x*((1 - frac)^(0:n))))
+}
