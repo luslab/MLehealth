@@ -1164,29 +1164,48 @@ calibrationScore <- function(
   predictions <-
     predict(loess.curve, data.frame(risk = risk.mids), se = TRUE)
   
-  if(anyNA(predictions$fit)) {
-    if(length(is.na(risk.mids) < 10)) {
-      warning.examples <- paste(risk.mids[is.na(risk.mids)], collapse = ', ')
+  pred.curve <- predictions$fit
+  
+  if(anyNA(pred.curve)) {
+    if(extremes) {
+      # Get the bins where we don't have a valid prediction
+      missing.risks <- risk.mids[is.na(pred.curve)]
+      # And predict 0 is < 0.5, 1 if greater, for a worst-case step-function
+      missing.risks <- as.numeric(missing.risks > 0.5)
+      # Finally, substitute them in
+      pred.curve[is.na(pred.curve)] <- missing.risks
     } else {
-      warning.examples <-
-        paste(
-          paste(head(risk.mids[is.na(risk.mids)], 3), collapse = ', '),
-          '...',
-          paste(tail(risk.mids[is.na(risk.mids)], 3), collapse = ', ')
-        )
+      # If there are missing values but extremes = FALSE, ie don't extend, then
+      # issue a warning to let the user know.
+      if(length(is.na(risk.mids) < 10)) {
+        warning.examples <- paste(risk.mids[is.na(risk.mids)], collapse = ', ')
+      } else {
+        warning.examples <-
+          paste(
+            paste(head(risk.mids[is.na(risk.mids)], 3), collapse = ', '),
+            '...',
+            paste(tail(risk.mids[is.na(risk.mids)], 3), collapse = ', ')
+          )
+      }
+      warning(
+        'Some predictions (for risk bins at ', warning.examples, ') return ',
+        'NA. This means calibration is being performed outside the range of ',
+        'the data which may mean values are not comparable. Set extremes = ',
+        'TRUE to assume worst-case predictions beyond the bounds of the ',
+        'actual predictions.'
+      )
     }
-    warning(
-      'Some predictions (for risk bins at ', warning.examples, ') return ',
-      'NA. This means calibration is being performed outside the range of the ',
-      'data which may mean values are not comparable.'
-    )
+
   }
   
   curve.area <-
     sum(
-      abs(predictions$fit - risk.mids) * risk.binwidths,
+      abs(pred.curve - risk.mids) * risk.binwidths,
       na.rm = TRUE
     )
+  
+  # Not sure what if anything to do about NAs in the standard error, so silently
+  # ignore them for now...
   curve.area.se <-
     sum(
       abs(predictions$se.fit) * risk.binwidths,
@@ -1199,7 +1218,8 @@ calibrationScore <- function(
     list(
       area = curve.area,
       se = curve.area.se,
-      curve = predictions$fit
+      curve = predictions$fit, # Not pred.curve, because we want to see NAs
+      curve.se = predictions$se.fit
     )
   } else {
     # ...otherwise, just return the summary statistic
