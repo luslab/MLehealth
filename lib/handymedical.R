@@ -1274,55 +1274,56 @@ summary2 <- function(x) {
   }
 }
 
-lookUpDescriptions <- function(df) {
+lookUpDescriptions <- function(x, bnf.lookup.filename = '../../data/') {
   # Create blank columns for which dictionary a given variable comes from, its
   # code in that dictionary, and a human-readable description looked up from the
   # CALIBER tables
-  df$code <- NA
-  df$description <- NA
+  
+  # Make a vector to hold descriptions, fill it with x so it's a) the right
+  # length and b) as a fallback
+  description <- x
+  code <- x
   
   # Look up ICD and OPCS codes
-  relevant.rows <- startsWith(df$var, 'hes.icd.')
-  df$code[relevant.rows] <- textAfter(df$var, 'hes.icd.')
-  for(i in which(relevant.rows)) {
-    
-    # Some of these don't work, so add in an if statement to catch the error
-    if(
-      length(CALIBER_DICT[dict == 'icd10' & code == df$code[i], term]) > 0
-    ){
-      df$description[i] <-
-        CALIBER_DICT[dict == 'icd10' & code == df$code[i], term]
-    } else {
-      df$description[i] <- 'ERROR: ICD not matched'
-    }
-  }
-  
-  relevant.rows <- startsWith(df$var, 'hes.opcs.')
-  df$code[relevant.rows] <- textAfter(df$var, 'hes.opcs.')
-  for(i in which(relevant.rows)) {
-    df$description[i] <-
-      CALIBER_DICT[dict == 'opcs' & code == df$code[i], term]
-  }
-  
-  relevant.rows <- startsWith(df$var, 'clinical.history.')
-  df$code[relevant.rows] <- textAfter(df$var, 'clinical.history.')
+  relevant.rows <- startsWith(x, 'hes.icd.')
+  code[relevant.rows] <- textAfter(x, 'hes.icd.')
   for(i in which(relevant.rows)) {
     # Some of these don't work, so add in an if statement to catch the error
     if(
-      length(CALIBER_DICT[dict == 'read' & medcode == df$code[i], term]) > 0
+      length(CALIBER_DICT[dict == 'icd10' & code == code[i], term]) > 0
     ){
-      df$description[i] <-
-        CALIBER_DICT[dict == 'read' & medcode == df$code[i], term]
+      description[i] <-
+        CALIBER_DICT[dict == 'icd10' & code == code[i], term]
     } else {
-      df$description[i] <- 'ERROR: medcode not matched'
+      description[i] <- 'ERROR: ICD not matched'
     }
   }
   
-  relevant.rows <- startsWith(df$var, 'clinical.values.')
-  df$code[relevant.rows] <- textAfter(df$var, 'clinical.values.')
+  relevant.rows <- startsWith(x, 'hes.opcs.')
+  code[relevant.rows] <- textAfter(x, 'hes.opcs.')
   for(i in which(relevant.rows)) {
-    testtype.datatype <- strsplit(df$code[i], '_', fixed =TRUE)[[1]]
-    df$description[i] <-
+    description[i] <- CALIBER_DICT[dict == 'opcs' & code == code[i], term]
+  }
+  
+  relevant.rows <- startsWith(x, 'clinical.history.')
+  code[relevant.rows] <- textAfter(x, 'clinical.history.')
+  for(i in which(relevant.rows)) {
+    # Some of these don't work, so add in an if statement to catch the error
+    if(
+      length(CALIBER_DICT[dict == 'read' & medcode == code[i], term]) > 0
+    ){
+      description[i] <-
+        CALIBER_DICT[dict == 'read' & medcode == code[i], term]
+    } else {
+      description[i] <- 'ERROR: medcode not matched'
+    }
+  }
+  
+  relevant.rows <- startsWith(x, 'clinical.values.')
+  code[relevant.rows] <- textAfter(x, 'clinical.values.')
+  for(i in which(relevant.rows)) {
+    testtype.datatype <- strsplit(code[i], '_', fixed =TRUE)[[1]]
+    description[i] <-
       paste0(
         CALIBER_ENTITY[enttype == testtype.datatype[1], description],
         ', ',
@@ -1330,33 +1331,37 @@ lookUpDescriptions <- function(df) {
       )
   }
   
-  relevant.rows <- startsWith(df$var, 'bnf.')
-  df$code[relevant.rows] <- textAfter(df$var, 'bnf.')
+  relevant.rows <- startsWith(x, 'bnf.')
+  code[relevant.rows] <- textAfter(x, 'bnf.')
   for(i in which(relevant.rows)) {
     # Some of these don't work, so add in an if statement to catch the error
     if(
-      length(CALIBER_BNFCODES[bnfcode == df$code[i], bnf]) > 0
+      length(CALIBER_BNFCODES[bnfcode == code[i], bnf]) > 0
     ){
-      df$description[i] <-
-        CALIBER_BNFCODES[bnfcode == df$code[i], bnf]
+      description[i] <-
+        CALIBER_BNFCODES[bnfcode == code[i], bnf]
     } else {
-      df$description[i] <- 'ERROR: BNF code not matched'
+      description[i] <- 'ERROR: BNF code not matched'
     }
   }
   
-  relevant.rows <- startsWith(df$var, 'tests.enttype.data3.')
-  df$code[relevant.rows] <- textAfter(df$var, 'tests.enttype.data3.')
+  relevant.rows <- startsWith(x, 'tests.enttype.data3.')
+  code[relevant.rows] <- textAfter(x, 'tests.enttype.data3.')
   for(i in which(relevant.rows)) {
-    testtype.datatype <- strsplit(df$code[i], '_', fixed =TRUE)[[1]]
-    df$description[i] <-
+    testtype.datatype <- strsplit(code[i], '_', fixed =TRUE)[[1]]
+    description[i] <-
       CALIBER_ENTITY[enttype == testtype.datatype[1], description]
   }
   
-  df
+  description
 }
 
 getVarNums <- function(x, frac = 0.2) {
   # Number of iterations until there's only one variable left
   n <- -ceil(log(x)/log(1 - frac))
   unique(round(x*((1 - frac)^(0:n))))
+}
+
+percentMissing <- function(x) {
+  sum(is.na(x))/length(x) * 100
 }
