@@ -721,16 +721,21 @@ survivalBootstrap <- function(
   } else if(model.type == 'ranger') {
     stop('model.type ranger not yet implemented')
   } else if(model.type == 'rfsrc') {
+    # rfsrc, if you installed it correctly, controls threading by changing an
+    # environment variable
+    options(rf.cores = n.threads)
+    
     return(
       boot(
         formula = surv.formula,
         data = df,
         statistic = bootstrapFitRfsrc,
         R = bootstraps,
-        parallel = 'multicore',
-        ncpus = n.threads,
+        parallel = 'no',
+        ncpus = 1, # disable parallelism because rfsrc can be run in parallel
         n.trees = n.trees,
         test.data = df.test,
+        
         ...
       )
     )
@@ -799,9 +804,8 @@ bootstrapFitSurvregMice <- function(formula, data, indices, test.data) {
 bootstrapFitRfsrc <- function(formula, data, indices, n.trees, test.data, ...) {
   # Wrapper function to pass an rfsrc fit with c-index calculations to boot.
   
-  # Number of cores is determined by the bootstrap being in parallel, so just
-  # Make sure that rfsrc is only using a single core per fit
-  options(rf.cores = 1)
+  # There used to be an rf-cores declaration here, but keep it as-is and run
+  # bootstrapping as a single-threaded process...
   
   d <- data[indices,]
   fit <-  
