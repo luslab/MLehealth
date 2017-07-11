@@ -1278,55 +1278,71 @@ summary2 <- function(x) {
   }
 }
 
-lookUpDescriptions <- function(x, bnf.lookup.filename = '../../data/') {
+lookUpDescriptions <- function(
+  x, bnf.lookup.filename = '../../data/product.txt'
+  ) {
   # Create blank columns for which dictionary a given variable comes from, its
   # code in that dictionary, and a human-readable description looked up from the
   # CALIBER tables
   
+  data("CALIBER_DICT")
+  
+  # If there's a BNF lookup filename, load that
+  if(!isExactlyNA(bnf.lookup.filename)) {
+    bnf.lookup <- fread(bnf.lookup.filename)
+  }
+  
   # Make a vector to hold descriptions, fill it with x so it's a) the right
   # length and b) as a fallback
   description <- x
-  code <- x
+  thecode <- x # slightly silly name to avoid data table clash with code column
   
   # Look up ICD and OPCS codes
   relevant.rows <- startsWith(x, 'hes.icd.')
-  code[relevant.rows] <- textAfter(x, 'hes.icd.')
+  thecode[relevant.rows] <- textAfter(x, 'hes.icd.')
   for(i in which(relevant.rows)) {
     # Some of these don't work, so add in an if statement to catch the error
     if(
-      length(CALIBER_DICT[dict == 'icd10' & code == code[i], term]) > 0
+      length(CALIBER_DICT[dict == 'icd10' & code == thecode[i], term]) > 0
     ){
       description[i] <-
-        CALIBER_DICT[dict == 'icd10' & code == code[i], term]
+        CALIBER_DICT[dict == 'icd10' & code == thecode[i], term]
     } else {
       description[i] <- 'ERROR: ICD not matched'
     }
   }
   
   relevant.rows <- startsWith(x, 'hes.opcs.')
-  code[relevant.rows] <- textAfter(x, 'hes.opcs.')
+  thecode[relevant.rows] <- textAfter(x, 'hes.opcs.')
   for(i in which(relevant.rows)) {
-    description[i] <- CALIBER_DICT[dict == 'opcs' & code == code[i], term]
+    if(
+      length(CALIBER_DICT[dict == 'opcs' & code == thecode[i], term]) > 0
+    ){
+      description[i] <-
+        CALIBER_DICT[dict == 'opcs' & code == thecode[i], term]
+    } else {
+      description[i] <- 'ERROR: OPCS not matched'
+    }
   }
   
   relevant.rows <- startsWith(x, 'clinical.history.')
-  code[relevant.rows] <- textAfter(x, 'clinical.history.')
+  thecode[relevant.rows] <- textAfter(x, 'clinical.history.')
   for(i in which(relevant.rows)) {
     # Some of these don't work, so add in an if statement to catch the error
     if(
-      length(CALIBER_DICT[dict == 'read' & medcode == code[i], term]) > 0
+      length(CALIBER_DICT[dict == 'read' & medcode == thecode[i], term]) > 0
     ){
       description[i] <-
-        CALIBER_DICT[dict == 'read' & medcode == code[i], term]
+        CALIBER_DICT[dict == 'read' & medcode == thecode[i], term]
     } else {
       description[i] <- 'ERROR: medcode not matched'
     }
   }
   
   relevant.rows <- startsWith(x, 'clinical.values.')
-  code[relevant.rows] <- textAfter(x, 'clinical.values.')
+  thecode[relevant.rows] <- textAfter(x, 'clinical.values.')
   for(i in which(relevant.rows)) {
-    testtype.datatype <- strsplit(code[i], '_', fixed =TRUE)[[1]]
+    testtype.datatype <- strsplit(thecode[i], '_', fixed =TRUE)[[1]]
     description[i] <-
       paste0(
         CALIBER_ENTITY[enttype == testtype.datatype[1], description],
@@ -1336,23 +1352,34 @@ lookUpDescriptions <- function(x, bnf.lookup.filename = '../../data/') {
   }
   
   relevant.rows <- startsWith(x, 'bnf.')
-  code[relevant.rows] <- textAfter(x, 'bnf.')
+  thecode[relevant.rows] <- textAfter(x, 'bnf.')
   for(i in which(relevant.rows)) {
     # Some of these don't work, so add in an if statement to catch the error
     if(
-      length(CALIBER_BNFCODES[bnfcode == code[i], bnf]) > 0
+      length(CALIBER_BNFCODES[bnfcode == thecode[i], bnf]) > 0
     ){
       description[i] <-
-        CALIBER_BNFCODES[bnfcode == code[i], bnf]
+        CALIBER_BNFCODES[bnfcode == thecode[i], bnf]
+      
+      # If a BNF product dictionary was supplied
+      if(!isExactlyNA(bnf.lookup.filename)) {
+        # If there's a matching BNF code, take the first element of the product
+        # table (there will often be many because many drugs fit into one code/
+        # BNF chapter)
+        if(!is.na(bnf.lookup[bnfcode == description[i], bnfchapter][1])) {
+          description[i] <- bnf.lookup[bnfcode == description[i], bnfchapter][1]
+        }
+        # Otherwise, leave it as the BNF code for future parsing
+      }
     } else {
       description[i] <- 'ERROR: BNF code not matched'
     }
   }
   
   relevant.rows <- startsWith(x, 'tests.enttype.data3.')
-  code[relevant.rows] <- textAfter(x, 'tests.enttype.data3.')
+  thecode[relevant.rows] <- textAfter(x, 'tests.enttype.data3.')
   for(i in which(relevant.rows)) {
-    testtype.datatype <- strsplit(code[i], '_', fixed =TRUE)[[1]]
+    testtype.datatype <- strsplit(thecode[i], '_', fixed =TRUE)[[1]]
     description[i] <-
       CALIBER_ENTITY[enttype == testtype.datatype[1], description]
   }
