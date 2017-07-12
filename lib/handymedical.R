@@ -735,7 +735,6 @@ survivalBootstrap <- function(
         ncpus = 1, # disable parallelism because rfsrc can be run in parallel
         n.trees = n.trees,
         test.data = df.test,
-        
         ...
       )
     )
@@ -995,7 +994,7 @@ getRiskAtTime <- function(model.fit, df, risk.time = 5, ...) {
   } else if(modelType(model.fit) == 'survfit') {
     # For now, survfit is just a Kaplan-Meier fit, and it only deals with a
     # single variable for KM strata. For multiple strata, this would require a
-    # bit or parsing to turn names like 'age=93, gender=Men' into an n-column
+    # bit of parsing to turn names like 'age=93, gender=Men' into an n-column
     # data frame.
     varname <-  substring(
       names(model.fit$strata)[1], 0,
