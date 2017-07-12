@@ -854,7 +854,8 @@ bootStats <- function(bootfit, uncertainty = 'sd', transform = identity) {
       data.frame(
         val  = t(ci)[, 2],
         lower = t(ci)[, 1],
-        upper = t(ci)[, 3]
+        upper = t(ci)[, 3],
+        row.names = names(bootfit$t0)
       )
     )
   } else {
