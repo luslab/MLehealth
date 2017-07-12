@@ -26,7 +26,7 @@ COHORT.use <- subset(COHORT.full, !exclude)
 n.data <- nrow(COHORT.use)
 
 # Define indices of test set
-test.set <- sample(1:n.data, (1/3)*n.data)
+test.set <- testSetIndices(COHORT.use, random.seed = 78361)
 
 COHORT.use <- prepSurvCol(COHORT.use, surv.time, surv.event,surv.event.yes)
 
@@ -55,23 +55,26 @@ ageOnly <- function(df, indices, df.test) {
       conf.type = "log-log"
     )
 
-  # Return the C-index and calibration score
+  # Return the calibration score
   c(
-    c.index = 
-      as.numeric(
-        survConcordance(
-          Surv(surv_time, surv_event) ~ age,
-          df.test
-        )$concordance
-      ),
     calibration.score =
       calibrationScore(
         calibrationTable(km.by.age, df.test)
       )$area
-      
   )
 }
 
+# C-index is by definition non-variable because we do not bootstrap or otherwise
+# permute the test set, and there's no 'training' phase
+age.c.index <- 
+  as.numeric(
+    survConcordance(
+      Surv(surv_time, surv_event) ~ age,
+      COHORT.use[test.set,]
+    )$concordance
+  )
+
+# Bootstrap to establish variability of calibration
 age.only.boot <-
   boot(
     data = COHORT.use[-test.set,],
@@ -85,9 +88,7 @@ age.only.boot <-
 age.only.boot.stats <- bootStats(age.only.boot, uncertainty = '95ci')
 
 #' C-index is
-#' **`r round(age.only.boot.stats['c.index', 'val'], 3)`
-#' (`r round(age.only.boot.stats['c.index', 'lower'], 3)` -
-#' `r round(age.only.boot.stats['c.index', 'upper'], 3)`)** 
+#' **`r round(age.c.index, 3)`** 
 #' on the held-out test set (not that it really matters, the model isn't
 #' 'trained' as such for the discrimination test...it's just oldest patient dies
 #' first).
@@ -122,9 +123,9 @@ varsToTable(
     model = 'age',
     imputation = FALSE,
     discretised = FALSE,
-    c.index = age.only.boot.stats['c.index', 'val'],
-    c.index.lower = age.only.boot.stats['c.index', 'lower'],
-    c.index.upper = age.only.boot.stats['c.index', 'upper'],
+    c.index = age.c.index,
+    c.index.lower = NA,
+    c.index.upper = NA,
     calibration.score = age.only.boot.stats['calibration.score', 'val'],
     calibration.score.lower = age.only.boot.stats['calibration.score', 'lower'],
     calibration.score.upper = age.only.boot.stats['calibration.score', 'upper']
