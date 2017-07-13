@@ -47,7 +47,7 @@ COHORT.prep <-
 n.data <- nrow(COHORT.prep)
 
 # Define indices of test set
-test.set <- testSetIndices(COHORT.use, random.seed = 78361)
+test.set <- testSetIndices(COHORT.prep, random.seed = 78361)
 
 # If we've not already done a calibration, then do one
 if(!file.exists(calibration.filename)) {
