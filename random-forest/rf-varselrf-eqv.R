@@ -10,18 +10,22 @@ opts_chunk$set(cache.lazy = FALSE)
 #' # Variable selection in data-driven health records
 #' 
 #' Having extracted around 600 variables which occur most frequently in patient
-#' records, let's try to narrow these down using the methodology of varSelRf.
+#' records, let's try to narrow these down using the methodology of varSelRf
+#' with a couple of custom additions (potentially multiple variable importance
+#' calculations at the outset, and cross-validation to choose the best number of
+#' variables at the end.)
 #' 
 #' ## User variables
 #' 
 #+ user_variables
 
-output.filename.base <- '../../output/rf-bigdata-try11-varselrf'
+output.filename.base <- '../../output/rf-bigdata-try12-varselrf2'
 
 nsplit <- 20
-n.trees.initial <- 2000
+n.trees.initial <- 500
+n.forests.initial <- 5
 n.trees.cv <- 500
-n.trees.final <- 10000
+n.trees.final <- 2000
 split.rule <- 'logrank'
 n.imputations <- 3
 cv.n.folds <- 3
@@ -29,7 +33,7 @@ vars.drop.frac <- 0.2 # Fraction of variables to drop at each iteration
 
 n.data <- NA # This is after any variables being excluded in prep
 
-n.threads <- 0
+n.threads <- 30
 
 #' ## Data set-up
 #' 
@@ -41,6 +45,7 @@ surv.predict.old <- c('age', 'smokstatus', 'imd_score', 'gender')
 untransformed.vars <- c('time_death', 'endpoint_death', 'exclude')
 
 source('../lib/shared.R')
+require(xtable)
 
 # Define these after shared.R or they will be overwritten!
 exclude.vars <-
@@ -67,6 +72,21 @@ percentMissing <- function(x) {
   sum(is.na(x))/length(x) * 100
 }
 
+l2df <- function(x) {
+  # Simple function to turn a list into a data frame so we can compare variable
+  # importances across iterations of the initial forests
+  rownames <- unique(unlist(lapply(x, names)))
+  df <-
+    data.frame(
+      matrix(
+        unlist(lapply(x, FUN = function(x){x[rownames]})),
+        ncol = length(x), byrow = FALSE
+      )
+    )
+  rownames(df) <- rownames
+  df
+}
+
 bigdata.prefixes <-
   c(
     'hes.icd.',
@@ -85,7 +105,7 @@ bigdata.columns <-
         # And it's not one of the columns we want to exclude?
         !(colnames(COHORT) %in% exclude.vars)
     )
-    ]
+  ]
 
 COHORT.bigdata <-
   COHORT[, c(
@@ -169,43 +189,58 @@ calibration.filename <- paste0(output.filename.base, '-varselcalibration.csv')
 
 # If we've not already done a calibration, then do one
 if(!file.exists(calibration.filename)) {
-  # Start by fitting a forest to all the variables
-  time.start <- handyTimer()
-  surv.model.fit.full <-
-    survivalFit(
-      surv.predict,
-      COHORT.bigdata[-test.set,],
-      model.type = 'rfsrc',
-      n.trees = n.trees.initial,
-      split.rule = split.rule,
-      n.threads = n.threads,
-      nimpute = 3,
-      nsplit = nsplit,
-      na.action = 'na.impute'
+  # Start by fitting several forests to all the variables
+  vimps.initial <- list()
+  time.fit <- c()
+  time.vimp <- c()
+  for(i in 1:n.forests.initial) {
+    time.start <- handyTimer()
+    surv.model.fit.full <-
+      survivalFit(
+        surv.predict,
+        COHORT.bigdata[-test.set,],
+        model.type = 'rfsrc',
+        n.trees = n.trees.initial,
+        split.rule = split.rule,
+        n.threads = n.threads,
+        nimpute = 3,
+        nsplit = nsplit,
+        na.action = 'na.impute'
+      )
+    time.fit <- c(time.fit, handyTimer(time.start))
+    
+    # Save the model
+    saveRDS(
+      surv.model.fit.full,
+      paste0(output.filename.base,'-initialmodel-', i,'.rds')
     )
-  time.fit <- handyTimer(time.start)
+    
+    # Calculate variable importance
+    time.start <- handyTimer()
+    var.imp <- vimp(surv.model.fit.full, importance = 'permute.ensemble')
+    time.vimp <- c(time.vimp, handyTimer(time.start))
+    # Save it
+    saveRDS(var.imp, paste0(output.filename.base, '-varimp-', i,'.rds'))
+    
+    # Make a vector of variable importances and append to the list
+    vimps.initial[[i]] <- sort(var.imp$importance, decreasing = TRUE)
+  }
   
-  # Save the model
-  saveRDS(surv.model.fit.full, paste0(output.filename.base,'-initialmodel.rds'))
+  cat('Total initial vimp time = ', sum(time.fit) + sum(time.vimp))
+  cat('Average fit time = ', mean(time.fit))
+  cat('Average vimp time = ', mean(time.vimp))
   
-  # Calculate variable importance
-  time.start <- handyTimer()
-  var.imp <- vimp(surv.model.fit.full, importance = 'permute.ensemble')
-  time.vimp <- handyTimer(time.start)
-  # Save it
-  saveRDS(var.imp, paste0(output.filename.base, '-varimp.rds'))
+  # Convert the vimps.initial list to a dataframe, rowwise
+  vimps.initial <- l2df(vimps.initial)
+  
+  # Take averages across rows to give variable importances to use
+  var.importances <- sort(apply(vimps.initial, 1, mean))
 
-  # Make a vector of variable importances for easy access
-  var.importances <- sort(var.imp$importance, decreasing = TRUE)
-  
   # Create an empty data frame to aggregate stats per fold
   cv.performance <- data.frame()
-  
   # Cross-validate over number of variables to try
   cv.vars <- getVarNums(length(var.importances))
-  
   COHORT.cv <- COHORT.bigdata[-test.set, ]
-  
   # Run crossvalidations. No need to parallelise because rfsrc is parallelised
   for(i in 1:length(cv.vars)) {
     # Get the subset of most important variables to use
@@ -378,7 +413,7 @@ surv.model.fit.final <-
   )
 time.fit.final <- handyTimer(time.start)
 
-saveRDS(surv.model.fit.full, paste0(output.filename.base, '-finalmodel.rds'))
+saveRDS(surv.model.fit.final, paste0(output.filename.base, '-finalmodel.rds'))
 
 #' Final model of `r n.trees.final` trees fitted in `r round(time.fit.final)`
 #' seconds! Let's see how it performs...
@@ -395,7 +430,7 @@ c.index <-
 #' 
 #' C-index is **`r round(c.index, 4)`** on the held-out test set.
 #' 
-#' #' ### Calibration
+#' ### Calibration
 #' 
 #' Does the model predict realistic probabilities of an event?
 #' 
@@ -422,7 +457,7 @@ calibrationPlot(calibration.table)
 # Save performance results
 varsToTable(
   data.frame(
-    model = 'rf-varselrf',
+    model = 'rf-varselrf2',
     imputation = FALSE,
     discretised = FALSE,
     c.index,
