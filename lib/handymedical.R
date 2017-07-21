@@ -814,21 +814,6 @@ bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
   )
 }
 
-bootstrapFitSurvregMice <- function(formula, data, indices, test.data) {
-  # Wrapper function to pass a survreg fit with c-index calculations to boot.
-  
-  d <- data[indices,]
-  fit <- survreg(formula, data = d, dist = 'exponential')
-  # Return fit coefficients, c-index on training data, c-index on test data
-  return(
-    c(
-      fit$qbar, # Bombined coefficients from the imputed runs are stored here
-      c.train = cIndex(fit, data, model.type = 'survreg'),
-      c.test = cIndex(fit, test.data, model.type = 'survreg')
-    )
-  )
-}
-
 bootstrapFitRfsrc <- function(formula, data, indices, n.trees, test.data, ...) {
   # Wrapper function to pass an rfsrc fit with c-index calculations to boot.
   
