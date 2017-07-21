@@ -829,13 +829,18 @@ bootstrapFitRfsrc <- function(formula, data, indices, n.trees, test.data, ...) {
       ...
     )
   
+
   # Check the model calibration on the test set
   calibration.table <- calibrationTable(fit, test.data, ...)
   calibration.score <- calibrationScore(calibration.table, curve = FALSE)
   
+  # Get variable importances by both C-index and calibration
+  var.imp.vector <- bootstrapVarImp(fit, data)
+  
   # Return fit coefficients, c-index on training data, c-index on test data
   return(
     c(
+      var.imp.vector,
       c.test = cIndex(fit, test.data, ...),
       calibration.score = calibration.score$area
     )
