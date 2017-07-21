@@ -771,15 +771,40 @@ bootstrapFit <- function(formula, data, indices, fit.fun) {
   return(coef(fit))
 }
 
+bootstrapVarImp <- function(fit, data, ...) {
+  # Variable importance by C-index
+  var.imp.c.index <- generalVarImp(fit, data, ...)
+  # Variable importance by calibration score
+  var.imp.calibration <-
+    generalVarImp(fit, data, statistic = calibrationScoreWrapper, ...)
+  
+  # Concatenate both into a vector with names to distinguish the two
+  var.imp.vector <- c(var.imp.c.index$var.imp, var.imp.calibration$var.imp)
+  names(var.imp.vector) <-
+    c(
+      paste0('vimp.c.index.', var.imp.c.index$var),
+      paste0('vimp.calibration.', var.imp.calibration$var)
+    )
+  
+  # Return that vector
+  var.imp.vector
+}
+
 bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
   # Wrapper function to pass a survreg fit with c-index calculations to boot.
   
   d <- data[indices,]
   fit <- survreg(formula, data = d, dist = 'exponential')
-  # Return fit coefficients, c-index on training data, c-index on test data
+  
+  # Get variable importances by both C-index and calibration
+  var.imp.vector <- bootstrapVarImp(fit, data)
+  
+  # Return fit coefficients, variable importances, c-index on training data,
+  # c-index on test data
   return(
     c(
       coef(fit),
+      var.imp.vector,
       c.train = cIndex(fit, data),
       c.test = cIndex(fit, test.data),
       calibration.score =
