@@ -193,48 +193,59 @@ if(!file.exists(calibration.filename)) {
   vimps.initial <- list()
   time.fit <- c()
   time.vimp <- c()
-  for(i in 1:n.forests.initial) {
-    time.start <- handyTimer()
-    surv.model.fit.full <-
-      survivalFit(
-        surv.predict,
-        COHORT.bigdata[-test.set,],
-        model.type = 'rfsrc',
-        n.trees = n.trees.initial,
-        split.rule = split.rule,
-        n.threads = n.threads,
-        nimpute = 3,
-        nsplit = nsplit,
-        na.action = 'na.impute'
-      )
-    time.fit <- c(time.fit, handyTimer(time.start))
-    
-    # Save the model
-    saveRDS(
-      surv.model.fit.full,
-      paste0(output.filename.base,'-initialmodel-', i,'.rds')
-    )
-    
-    # Calculate variable importance
-    time.start <- handyTimer()
-    var.imp <- vimp(surv.model.fit.full, importance = 'permute.ensemble')
-    time.vimp <- c(time.vimp, handyTimer(time.start))
-    # Save it
-    saveRDS(var.imp, paste0(output.filename.base, '-varimp-', i,'.rds'))
-    
-    # Make a vector of variable importances and append to the list
-    vimps.initial[[i]] <- sort(var.imp$importance, decreasing = TRUE)
-  }
   
-  cat('Total initial vimp time = ', sum(time.fit) + sum(time.vimp))
-  cat('Average fit time = ', mean(time.fit))
-  cat('Average vimp time = ', mean(time.vimp))
+  # If we haven't already made the initial forests...
+  if(!paste0(output.filename.base,'-initialmodel-', n.forests.initial,'.rds')) {
+    for(i in 1:n.forests.initial) {
+      time.start <- handyTimer()
+      surv.model.fit.full <-
+        survivalFit(
+          surv.predict,
+          COHORT.bigdata[-test.set,],
+          model.type = 'rfsrc',
+          n.trees = n.trees.initial,
+          split.rule = split.rule,
+          n.threads = n.threads,
+          nimpute = 3,
+          nsplit = nsplit,
+          na.action = 'na.impute'
+        )
+      time.fit <- c(time.fit, handyTimer(time.start))
+      
+      # Save the model
+      saveRDS(
+        surv.model.fit.full,
+        paste0(output.filename.base,'-initialmodel-', i,'.rds')
+      )
+      
+      # Calculate variable importance
+      time.start <- handyTimer()
+      var.imp <- vimp(surv.model.fit.full, importance = 'permute.ensemble')
+      time.vimp <- c(time.vimp, handyTimer(time.start))
+      # Save it
+      saveRDS(var.imp, paste0(output.filename.base, '-varimp-', i,'.rds'))
+      
+      # Make a vector of variable importances and append to the list
+      vimps.initial[[i]] <- sort(var.imp$importance, decreasing = TRUE)
+    }
+    
+    cat('Total initial vimp time = ', sum(time.fit) + sum(time.vimp))
+    cat('Average fit time = ', mean(time.fit))
+    cat('Average vimp time = ', mean(time.vimp))
+    
+  } else {
+    # If we already made the initial forests, just load them
+    for(i in 1:n.forests.initial) {
+      vimps.initial[[i]] <-
+        readRDS(paste0(output.filename.base, '-varimp-', i,'.rds'))
+    }
+  }
   
   # Convert the vimps.initial list to a dataframe, rowwise
   vimps.initial <- l2df(vimps.initial)
   
   # Take averages across rows to give variable importances to use
-  var.importances <- sort(apply(vimps.initial, 1, mean))
+  var.importances <- sort(apply(vimps.initial, 1, mean), decreasing = TRUE)
 
   # Create an empty data frame to aggregate stats per fold
   cv.performance <- data.frame()
