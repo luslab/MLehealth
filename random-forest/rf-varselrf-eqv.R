@@ -416,23 +416,55 @@ time.fit.final <- handyTimer(time.start)
 saveRDS(surv.model.fit.final, paste0(output.filename.base, '-finalmodel.rds'))
 
 #' Final model of `r n.trees.final` trees fitted in `r round(time.fit.final)`
-#' seconds! Let's see how it performs...
+#' seconds!
 #' 
-#' ### Discrimination
+#' Also bootstrap this final fitting stage. A fully proper bootstrap would
+#' iterate over the whole model-building process including variable selection,
+#' but that would be prohibitive in terms of computational time.
 #' 
-#+ c_index_final
+#+ bootstrap_final
 
-c.index <-
-  cIndex(
-    surv.model.fit.final, COHORT.bigdata[test.set,], na.action = 'na.impute'
+surv.model.fit.boot <-
+  survivalBootstrap(
+    surv.predict.partial,
+    COHORT.bigdata[-test.set,], # Training set
+    COHORT.bigdata[test.set,],  # Test set
+    model.type = 'rfsrc',
+    n.trees = n.trees.final,
+    split.rule = split.rule,
+    n.threads = n.threads,
+    nimpute = 3,
+    nsplit = nsplit,
+    na.action = 'na.impute',
+    bootstraps = bootstraps
   )
 
+# Get coefficients and variable importances from bootstrap fits
+surv.model.fit.coeffs <- bootStats(surv.model.fit.boot, uncertainty = '95ci')
+
+#' ## Performance
 #' 
-#' C-index is **`r round(c.index, 4)`** on the held-out test set.
+#' ### C-index
 #' 
+#' C-indices are **`r round(surv.model.fit.coeffs['c.train', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['c.train', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['c.train', 'upper'], 3)`)**
+#' on the training set and
+#' **`r round(surv.model.fit.coeffs['c.test', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['c.test', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['c.test', 'upper'], 3)`)** on the test set.
+#' 
+#'
 #' ### Calibration
 #' 
-#' Does the model predict realistic probabilities of an event?
+#' The bootstrapped calibration score is
+#' **`r round(surv.model.fit.coeffs['calibration.score', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['calibration.score', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['calibration.score', 'upper'], 3)`)**.
+#' 
+#' Let's draw a representative curve from the unbootstrapped fit... (It would be
+#' better to draw all the curves from the bootstrap fit to get an idea of
+#' variability, but I've not implemented this yet.)
 #' 
 #+ calibration_plot
 
