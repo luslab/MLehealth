@@ -928,6 +928,32 @@ bootMIStats <- function(boot.mi, uncertainty = '95ci', transform = identity) {
   }
 }
 
+bootstrapDiff <- function(x1, x2, uncertainty = '95ci') {
+  # Work out the difference between two values calculated by bootstrapping
+  
+  x1mx2 <- 
+    sample(x1, size = length(x1) * 10, replace = TRUE) -
+      sample(x2, size = length(x1) * 10, replace = TRUE)
+  
+  if(uncertainty == '95ci') {
+    est <- quantile(x1mx2, probs = c(0.5, 0.025, 0.975))
+    names(est) <- c('val', 'lower', 'upper')
+    return(est)
+  } else if(uncertainty == 'sd') {
+    val <- mean(x1mx2)
+    stdev <- sd(x1mx2)
+    return(
+      c(
+        val = val,
+        lower = val - stdev,
+        upper = val + stdev
+      )
+    )
+  } else {
+    stop("Unknown value '", uncertainty, "' for uncertainty parameter.")
+  }
+}
+
 negExp <- function(x) {
   exp(-x)
 }
