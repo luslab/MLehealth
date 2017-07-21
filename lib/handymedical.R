@@ -414,13 +414,18 @@ cIndex <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
 
 generalVarImp <-
   function(
-    model.fit, df, vars = NA, risk.time = 5, tod.round = 0.1, ...
+    model.fit, df, vars = NA, risk.time = 5, tod.round = 0.1,
+    statistic = cIndex, ...
     ) {
-  baseline.c.index <- cIndex(model.fit, df, risk.time, tod.round, ...)
+  baseline.statistic <- statistic(model.fit, df, risk.time, tod.round, ...)
   
   # If no variables were passed, let's do it on all of the variables
   if(isExactlyNA(vars)) {
-    vars <- names(model.fit$xvar)
+    if(modelType(model.fit) == 'survreg') {
+      vars <- attr(model.fit$terms, 'term.labels')
+    } else {
+      vars <- names(model.fit$xvar)
+    }
   }
   
   var.imp <- data.frame(
@@ -434,9 +439,8 @@ generalVarImp <-
     # Permute values of the sample in question
     df2[, var.imp[i, 'var']] <- sample(df[, var.imp[i, 'var']], replace = TRUE)
     # Calculate the C-index based on the permuted data
-    var.c.index <- cIndex(model.fit, df2, risk.time, tod.round,
-                          ...)
-    var.imp[i, 'var.imp'] <- baseline.c.index - var.c.index
+    var.statistic <- statistic(model.fit, df2, risk.time, tod.round)
+    var.imp[i, 'var.imp'] <- baseline.statistic - var.statistic
   }
   
   # Return the data frame of variable importances
