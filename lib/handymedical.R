@@ -1253,6 +1253,18 @@ calibrationScore <- function(
   }
 }
 
+calibrationScoreWrapper <- function(
+  model.fit, df, risk.time = 5, tod.round = 0.1, ...
+) {
+  # Simple wrapper function for working out the calibration score directly from
+  # model fit, data frame and extra variables if needed.
+  # Returns 1 - area so higher is better.
+  1 - 
+    calibrationScore(
+      calibrationTable(model.fit, df, risk.time, tod.round, ...)
+    )$area
+}
+
 testSetIndices <- function(df, test.fraction = 1/3, random.seed = NA) {
   # Get indices for the test set in a data frame, with a random seed to make the
   # process deterministic if requested.
