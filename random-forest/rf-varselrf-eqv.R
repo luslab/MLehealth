@@ -30,10 +30,11 @@ split.rule <- 'logrank'
 n.imputations <- 3
 cv.n.folds <- 3
 vars.drop.frac <- 0.2 # Fraction of variables to drop at each iteration
+bootstraps <- 200
 
 n.data <- NA # This is after any variables being excluded in prep
 
-n.threads <- 30
+n.threads <- 20
 
 #' ## Data set-up
 #' 
@@ -195,7 +196,9 @@ if(!file.exists(calibration.filename)) {
   time.vimp <- c()
   
   # If we haven't already made the initial forests...
-  if(!paste0(output.filename.base,'-initialmodel-', n.forests.initial,'.rds')) {
+  if(!file.exists(
+    paste0(output.filename.base,'-varimp-', n.forests.initial,'.rds'))
+    ) {
     for(i in 1:n.forests.initial) {
       time.start <- handyTimer()
       surv.model.fit.full <-
@@ -236,8 +239,8 @@ if(!file.exists(calibration.filename)) {
   } else {
     # If we already made the initial forests, just load them
     for(i in 1:n.forests.initial) {
-      vimps.initial[[i]] <-
-        readRDS(paste0(output.filename.base, '-varimp-', i,'.rds'))
+      var.imp <- readRDS(paste0(output.filename.base, '-varimp-', i,'.rds'))
+      vimps.initial[[i]] <- sort(var.imp$importance, decreasing = TRUE)
     }
   }
   
@@ -246,6 +249,9 @@ if(!file.exists(calibration.filename)) {
   
   # Take averages across rows to give variable importances to use
   var.importances <- sort(apply(vimps.initial, 1, mean), decreasing = TRUE)
+  
+  # Save the result
+  saveRDS(var.importances, paste0(output.filename.base, '-varimp.rds'))
 
   # Create an empty data frame to aggregate stats per fold
   cv.performance <- data.frame()
@@ -330,8 +336,7 @@ if(!file.exists(calibration.filename)) {
   } # End calibration loop (i)
 } else {
   cv.performance <- read.csv(calibration.filename)
-  var.imp <- readRDS(paste0(output.filename.base, '-varimp.rds'))
-  var.importances <- sort(var.imp$importance, decreasing = TRUE)
+  var.importances <- readRDS(paste0(output.filename.base, '-varimp.rds'))
 }
 
 #' ## Find the best model from the calibrations
@@ -503,12 +508,14 @@ varsToTable(
     model = 'rf-varselrf2',
     imputation = FALSE,
     discretised = FALSE,
-    c.index,
-    c.index.lower = NA,
-    c.index.upper = NA, # No bootstrapping implemented yet
-    calibration.score = calibration.score[['area']],
-    calibration.score.lower = NA,
-    calibration.score.upper = NA
+    c.index = surv.model.fit.coeffs['c.train', 'val'],
+    c.index.lower = surv.model.fit.coeffs['c.train', 'lower'],
+    c.index.upper = surv.model.fit.coeffs['c.train', 'upper'],
+    calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
+    calibration.score.lower =
+      surv.model.fit.coeffs['calibration.score', 'lower'],
+    calibration.score.upper =
+      surv.model.fit.coeffs['calibration.score', 'upper']
   ),
   performance.file,
   index.cols = c('model', 'imputation', 'discretised')
