@@ -426,6 +426,10 @@ generalVarImp <-
     } else {
       vars <- names(model.fit$xvar)
     }
+    # Then, remove any variables which don't appear in the dataset, because we
+    # can't test them (this might be interaction terms like age:gender, for
+    # example)
+    vars <- vars[vars %in% names(df)]
   }
   
   var.imp <- data.frame(
@@ -797,7 +801,7 @@ bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
   fit <- survreg(formula, data = d, dist = 'exponential')
   
   # Get variable importances by both C-index and calibration
-  var.imp.vector <- bootstrapVarImp(fit, data)
+  var.imp.vector <- bootstrapVarImp(fit, d)
   
   # Return fit coefficients, variable importances, c-index on training data,
   # c-index on test data
@@ -817,25 +821,14 @@ bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
 bootstrapFitRfsrc <- function(formula, data, indices, n.trees, test.data, ...) {
   # Wrapper function to pass an rfsrc fit with c-index calculations to boot.
   
-  # There used to be an rf-cores declaration here, but keep it as-is and run
-  # bootstrapping as a single-threaded process...
-  
-  d <- data[indices,]
-  fit <-  
-    rfsrc(
-      formula,
-      data,
-      ntree = n.trees,
-      ...
-    )
-  
+  fit <-  rfsrc(formula, data[indices, ], ntree = n.trees, ...)
 
   # Check the model calibration on the test set
   calibration.table <- calibrationTable(fit, test.data, ...)
   calibration.score <- calibrationScore(calibration.table, curve = FALSE)
   
   # Get variable importances by both C-index and calibration
-  var.imp.vector <- bootstrapVarImp(fit, data)
+  var.imp.vector <- bootstrapVarImp(fit, data[indices, ])
   
   # Return fit coefficients, c-index on training data, c-index on test data
   return(
