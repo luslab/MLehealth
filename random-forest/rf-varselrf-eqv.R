@@ -69,10 +69,6 @@ exclude.vars <-
 
 COHORT <- fread(data.filename.big)
 
-percentMissing <- function(x) {
-  sum(is.na(x))/length(x) * 100
-}
-
 l2df <- function(x) {
   # Simple function to turn a list into a data frame so we can compare variable
   # importances across iterations of the initial forests
