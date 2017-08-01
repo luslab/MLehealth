@@ -19,17 +19,17 @@ opts_chunk$set(cache.lazy = FALSE)
 output.filename.base <- '../../output/rf-bigdata-try11-varselmiss'
 
 nsplit <- 20
-n.trees.initial <- 2000
 n.trees.cv <- 500
-n.trees.final <- 10000
+n.trees.final <- 500
 split.rule <- 'logrank'
 n.imputations <- 3
 cv.n.folds <- 3
 vars.drop.frac <- 0.2 # Fraction of variables to drop at each iteration
+bootstraps <- 200
 
 n.data <- NA # This is after any variables being excluded in prep
 
-n.threads <- 20
+n.threads <- 40
 
 #' ## Data set-up
 #' 
@@ -41,6 +41,7 @@ surv.predict.old <- c('age', 'smokstatus', 'imd_score', 'gender')
 untransformed.vars <- c('time_death', 'endpoint_death', 'exclude')
 
 source('../lib/shared.R')
+require(xtable)
 
 # Define these after shared.R or they will be overwritten!
 exclude.vars <-
@@ -257,8 +258,6 @@ if(!file.exists(calibration.filename)) {
   } # End calibration loop (i)
 } else {
   cv.performance <- read.csv(calibration.filename)
-  var.imp <- readRDS(paste0(output.filename.base, '-varimp.rds'))
-  var.importances <- sort(var.imp$importance, decreasing = TRUE)
 }
 
 #' ## Find the best model from the calibrations
@@ -347,26 +346,58 @@ surv.model.fit.final <-
   )
 time.fit.final <- handyTimer(time.start)
 
-saveRDS(surv.model.fit.full, paste0(output.filename.base, '-finalmodel.rds'))
+saveRDS(surv.model.fit.final, paste0(output.filename.base, '-finalmodel.rds'))
 
 #' Final model of `r n.trees.final` trees fitted in `r round(time.fit.final)`
-#' seconds! Let's see how it performs...
+#' seconds! 
 #' 
-#' ### Discrimination
+#' Also bootstrap this final fitting stage. A fully proper bootstrap would
+#' iterate over the whole model-building process including variable selection,
+#' but that would be prohibitive in terms of computational time.
 #' 
-#+ c_index_final
+#+ bootstrap_final
 
-c.index <-
-  cIndex(
-    surv.model.fit.final, COHORT.bigdata[test.set,], na.action = 'na.impute'
+surv.model.fit.boot <-
+  survivalBootstrap(
+    surv.predict.partial,
+    COHORT.bigdata[-test.set,], # Training set
+    COHORT.bigdata[test.set,],  # Test set
+    model.type = 'rfsrc',
+    n.trees = n.trees.final,
+    split.rule = split.rule,
+    n.threads = n.threads,
+    nimpute = 3,
+    nsplit = nsplit,
+    na.action = 'na.impute',
+    bootstraps = bootstraps
   )
 
+# Get coefficients and variable importances from bootstrap fits
+surv.model.fit.coeffs <- bootStats(surv.model.fit.boot, uncertainty = '95ci')
+
+#' ## Performance
 #' 
-#' C-index is **`r round(c.index, 4)`** on the held-out test set.
+#' ### C-index
 #' 
-#' #' ### Calibration
+#' C-indices are **`r round(surv.model.fit.coeffs['c.train', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['c.train', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['c.train', 'upper'], 3)`)**
+#' on the training set and
+#' **`r round(surv.model.fit.coeffs['c.test', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['c.test', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['c.test', 'upper'], 3)`)** on the test set.
 #' 
-#' Does the model predict realistic probabilities of an event?
+#'
+#' ### Calibration
+#' 
+#' The bootstrapped calibration score is
+#' **`r round(surv.model.fit.coeffs['calibration.score', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['calibration.score', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['calibration.score', 'upper'], 3)`)**.
+#' 
+#' Let's draw a representative curve from the unbootstrapped fit... (It would be
+#' better to draw all the curves from the bootstrap fit to get an idea of
+#' variability, but I've not implemented this yet.)
 #' 
 #+ calibration_plot
 
@@ -394,12 +425,14 @@ varsToTable(
     model = 'rf-varselmiss',
     imputation = FALSE,
     discretised = FALSE,
-    c.index,
-    c.index.lower = NA,
-    c.index.upper = NA, # No bootstrapping implemented yet
-    calibration.score = calibration.score[['area']],
-    calibration.score.lower = NA,
-    calibration.score.upper = NA
+    c.index = surv.model.fit.coeffs['c.train', 'val'],
+    c.index.lower = surv.model.fit.coeffs['c.train', 'lower'],
+    c.index.upper = surv.model.fit.coeffs['c.train', 'upper'],
+    calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
+    calibration.score.lower =
+      surv.model.fit.coeffs['calibration.score', 'lower'],
+    calibration.score.upper =
+      surv.model.fit.coeffs['calibration.score', 'upper']
   ),
   performance.file,
   index.cols = c('model', 'imputation', 'discretised')
