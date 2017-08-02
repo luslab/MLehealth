@@ -20,17 +20,18 @@ n.data <- NA # This is of full dataset...further rows may be excluded in prep
 endpoint <- 'death.imputed'
 
 old.coefficients.filename <- 'rapsomaniki-cox-values-from-paper.csv'
-compare.coefficients.filename <-
-  '../../output/caliber-replicate-imputed-survreg-bootstrap-1.csv'
+
+output.filename.base <- '../../output/caliber-replicate-imputed-survreg-3'
+
+
 cox.var.imp.perm.filename <-
   '../../output/caliber-replicate-imputed-survreg-bootstrap-var-imp-perm-1.csv'
 cox.var.imp.perm.missing.filename <-
   '../../output/caliber-replicate-with-missing-survreg-bootstrap-var-imp-perm-1.csv'
-model.filename <-
-  '../../output/caliber-replicate-imputed-model-survreg-bootstrap-1.rds'
+
 
 bootstraps <- 100
-n.threads <- 8
+n.threads <- 10
 
 #' ## Setup
 
@@ -171,7 +172,7 @@ for(i in 1:length(imputed.data)) {
 }
 
 # Save the fits, because it might've taken a while!
-saveRDS(fit.exp.boot, model.filename)
+saveRDS(fit.exp.boot, paste0(output.filename.base, '-surv-boot-imp.rds'))
 
 # Unpackage the uncertainties from the bootstrapped data
 fit.exp.boot.ests <-  bootMIStats(fit.exp.boot)
