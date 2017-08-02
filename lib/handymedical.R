@@ -743,7 +743,12 @@ survivalBootstrap <- function(
         ncpus = 1, # disable parallelism because rfsrc can be run in parallel
         n.trees = n.trees,
         test.data = df.test,
-        ...
+        # Boot requires named variables, so can't use ... here. This slight
+        # kludge means that this will fail unless these three variables are
+        # explicitly specified in the survivalBootstrap call.
+        nimpute = nimpute,
+        nsplit = nsplit,
+        na.action = na.action
       )
     )
   }
@@ -818,13 +823,19 @@ bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
   )
 }
 
-bootstrapFitRfsrc <- function(formula, data, indices, n.trees, test.data, ...) {
+bootstrapFitRfsrc <-
+  function(
+    formula, data, indices, n.trees, test.data, nimpute, nsplit, na.action
+  )
+{
   # Wrapper function to pass an rfsrc fit with c-index calculations to boot.
   
-  fit <-  rfsrc(formula, data[indices, ], ntree = n.trees, ...)
+  fit <-
+    rfsrc(formula, data[indices, ], ntree = n.trees, nimpute, nsplit, na.action)
 
   # Check the model calibration on the test set
-  calibration.table <- calibrationTable(fit, test.data, ...)
+  calibration.table <-
+    calibrationTable(fit, test.data, nimpute, nsplit, na.action)
   calibration.score <- calibrationScore(calibration.table, curve = FALSE)
   
   # Get variable importances by both C-index and calibration
