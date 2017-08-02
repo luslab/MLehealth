@@ -48,7 +48,7 @@ COHORT.prep <-
 n.data <- nrow(COHORT.prep)
 
 # Define indices of test set
-test.set <- sample(1:n.data, (1/3)*n.data)
+test.set <- testSetIndices(COHORT.prep, random.seed = 78361)
 
 # Process settings: don't touch anything!!
 process.settings <-
