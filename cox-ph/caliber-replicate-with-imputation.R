@@ -53,7 +53,7 @@ for(i in 1:length(imputed.data)) {
 # Define n.data based on the imputed data, which has already been preprocessed
 n.data <- nrow(imputed.data[[1]])
 # Define indices of test set
-test.set <- sample(1:n.data, (1/3)*n.data)
+test.set <- testSetIndices(imputed.data[[1]], random.seed = 78361)
 
 #' OK, we've now got **`r n.data`** patients, split into a training set of
 #' `r n.data - length(test.set)` and a test set of `r length(test.set)`.
