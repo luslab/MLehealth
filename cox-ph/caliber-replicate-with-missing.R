@@ -91,7 +91,7 @@ if(!is.na(n.data)){
 # Redefine n.data just in case we lost any rows
 n.data <- nrow(COHORT.use)
 # Define indices of test set
-test.set <- sample(1:n.data, (1/3)*n.data)
+test.set <- testSetIndices(COHORT.use, random.seed = 78361)
 
 #' OK, we've now got **`r n.data`** patients, split into a training set of
 #' `r n.data - length(test.set)` and a test set of `r length(test.set)`.
@@ -639,18 +639,3 @@ ggplot() +
       label = quantity.level
     )
   )
-
-#' ## Conclusion
-#' 
-#' That's all folks! Just to confirm that this is reproducible, let's check that
-#' our random number generator is lined up as expected after all those
-#' calculations. If your seed is the same, you should expect the two random
-#' strings to be the same too.
-#' 
-#' Original random seed: 35498 (found in ``../random-forests/shared.R``);
-#' current random seed: `r random.seed`
-#' 
-#' 
-#' Original random string: ``HPMFNEVRGMWPBYYLNUBB``
-#' 
-#' Current random string: ```r randomString(20, LETTERS)```
