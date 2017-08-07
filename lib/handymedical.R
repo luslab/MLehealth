@@ -1448,10 +1448,10 @@ lookUpDescriptions <- function(
   description
 }
 
-getVarNums <- function(x, frac = 0.2) {
-  # Number of iterations until there's only one variable left
-  n <- -ceil(log(x)/log(1 - frac))
-  unique(round(x*((1 - frac)^(0:n))))
+getVarNums <- function(x, frac = 0.2, min = 1) {
+  # Number of iterations until there are only min variables left
+  n <- -ceiling(log(x/min)/log(1 - frac))
+  unique(round(x*((1 - frac)^(n:0))))
 }
 
 percentMissing <- function(x) {
