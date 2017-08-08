@@ -376,7 +376,7 @@ vars.df <-
 
 vars.df$descriptions <- lookUpDescriptions(surv.predict.partial)
 
-vars.df$missingness <- missingness[1:n.vars]
+vars.df$missingness <- missingness[surv.predict.partial]
 
 #+ variables_table, results='asis'
 
