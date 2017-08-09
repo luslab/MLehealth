@@ -11,13 +11,13 @@ opts_chunk$set(cache.lazy = FALSE)
 #' 
 #' 
 
-calibration.filename <- '../../output/survreg-crossvalidation-try4.csv'
+calibration.filename <- '../../output/survreg-crossvalidation-try5.csv'
 caliber.missing.coefficients.filename <-
   '../../output/caliber-replicate-with-missing-survreg-bootstrap-coeffs-1.csv'
 comparison.filename <-
   '../../output/caliber-replicate-with-missing-var-imp-try2.csv'
 # The first part of the filename for any output
-output.filename.base <- '../../output/all-cv-survreg-boot-try4'
+output.filename.base <- '../../output/all-cv-survreg-boot-try5'
 
 
 # What kind of model to fit to...currently 'cph' (Cox model), 'ranger' or
@@ -87,8 +87,6 @@ print(surv.model.fit)
 #'
 #+ cox_coefficients_plot
 
-# Unpackage the uncertainties from the bootstrapped data
-surv.boot.ests <- bootStats(surv.model.fit.boot, uncertainty = '95ci')
 
 # Save bootstrapped performance values
 varsToTable(
@@ -158,12 +156,6 @@ cph.coeffs <- cphCoeffs(
   COHORT.optimised, surv.predict, model.type = 'boot.survreg'
 )
 
-# Transform these after extraction, because the default value for the base
-# level of a factor in bootStats is 0, and e^0 = 1
-cph.coeffs$val <- negExp(cph.coeffs$val)
-cph.coeffs$lower <- negExp(cph.coeffs$lower)
-cph.coeffs$upper <- negExp(cph.coeffs$upper)
-
 # We'll need the CALIBER scaling functions for plotting
 source('caliber-scale.R')
 
@@ -229,17 +221,12 @@ for(variable in unique(cph.coeffs$var)) {
         )
       # Then, scale it with the caliber scaling
       baseline.bin.val <- caliberScaleUnits(baseline.bin.avg, variable)
-      # Finally, convert it to a risk
-      baseline.bin.risk <- 
-        caliber.missing.coeffs$our_value[
-          caliber.missing.coeffs$quantity == variable
-          ] ^ baseline.bin.val
-      
-      # And now, multiply all the discretised values by that value to make them
+
+      # And now, add all the discretised values to that value to make them
       # comparable...
       cph.coeffs[cph.coeffs$var == variable, c('val', 'lower', 'upper')] <-
-        cph.coeffs[cph.coeffs$var == variable, c('val', 'lower', 'upper')] *
-        baseline.bin.risk
+        cph.coeffs[cph.coeffs$var == variable, c('val', 'lower', 'upper')] +
+        baseline.bin.val
       
       # Now, plot this variable as a stepped line plot using those quantile
       # boundaries
@@ -291,15 +278,15 @@ for(variable in unique(cph.coeffs$var)) {
       continuous.cox$y <-
         caliber.missing.coeffs$our_value[
           caliber.missing.coeffs$quantity == variable
-          ] ^ continuous.cox$var.x.scaled
+          ] * continuous.cox$var.x.scaled
       continuous.cox$upper <-
         caliber.missing.coeffs$our_upper[
           caliber.missing.coeffs$quantity == variable
-          ] ^ continuous.cox$var.x.scaled
+          ] * continuous.cox$var.x.scaled
       continuous.cox$lower <-
         caliber.missing.coeffs$our_lower[
           caliber.missing.coeffs$quantity == variable
-          ] ^ continuous.cox$var.x.scaled
+          ] * continuous.cox$var.x.scaled
       
       cox.discrete.plot <-
         cox.discrete.plot +
