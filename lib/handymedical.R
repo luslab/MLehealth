@@ -443,7 +443,7 @@ generalVarImp <-
     # Permute values of the sample in question
     df2[, var.imp[i, 'var']] <- sample(df[, var.imp[i, 'var']], replace = TRUE)
     # Calculate the C-index based on the permuted data
-    var.statistic <- statistic(model.fit, df2, risk.time, tod.round)
+    var.statistic <- statistic(model.fit, df2, risk.time, tod.round, ...)
     var.imp[i, 'var.imp'] <- baseline.statistic - var.statistic
   }
   
@@ -747,8 +747,7 @@ survivalBootstrap <- function(
         # kludge means that this will fail unless these three variables are
         # explicitly specified in the survivalBootstrap call.
         nimpute = nimpute,
-        nsplit = nsplit,
-        na.action = na.action
+        nsplit = nsplit
       )
     )
   }
@@ -802,6 +801,8 @@ bootstrapVarImp <- function(fit, data, ...) {
 bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
   # Wrapper function to pass a survreg fit with c-index calculations to boot.
   
+  print(paste('iteration', sample(1:100, 1)))
+  
   d <- data[indices,]
   fit <- survreg(formula, data = d, dist = 'exponential')
   
@@ -825,27 +826,30 @@ bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
 
 bootstrapFitRfsrc <-
   function(
-    formula, data, indices, n.trees, test.data, nimpute, nsplit, na.action
+    formula, data, indices, n.trees, test.data, nimpute, nsplit
   )
 {
   # Wrapper function to pass an rfsrc fit with c-index calculations to boot.
   
   fit <-
-    rfsrc(formula, data[indices, ], ntree = n.trees, nimpute, nsplit, na.action)
+    rfsrc(
+      formula, data[indices, ], ntree = n.trees,
+      nimpute = nimpute, nsplit = nsplit, na.action = 'na.impute'
+    )
 
   # Check the model calibration on the test set
   calibration.table <-
-    calibrationTable(fit, test.data, nimpute, nsplit, na.action)
+    calibrationTable(fit, test.data, na.action = 'na.impute')
   calibration.score <- calibrationScore(calibration.table, curve = FALSE)
   
   # Get variable importances by both C-index and calibration
-  var.imp.vector <- bootstrapVarImp(fit, data[indices, ])
+  var.imp.vector <- bootstrapVarImp(fit, data[indices, ], na.action = 'na.impute')
   
   # Return fit coefficients, c-index on training data, c-index on test data
   return(
     c(
       var.imp.vector,
-      c.test = cIndex(fit, test.data, ...),
+      c.test = cIndex(fit, test.data, nsplit = nsplit, na.action = 'na.impute'),
       calibration.score = calibration.score$area
     )
   )
