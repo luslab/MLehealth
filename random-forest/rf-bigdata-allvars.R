@@ -1,31 +1,15 @@
-#+ knitr_setup, include = FALSE
-
-# Whether to cache the intensive code sections. Set to FALSE to recalculate
-# everything afresh.
-cacheoption <- TRUE
-# Disable lazy caching globally, because it fails for large objects, and all the
-# objects we wish to cache are large...
-opts_chunk$set(cache.lazy = FALSE)
-
 #' # Summarising big data
 #' 
 #' Having extracted a huge number of variables, let's find out what we got...
 #' 
-#' ## Data set-up
-#' 
 #+ data_setup
 
-output.filename.base <- '../../output/rf-bigdata-try6-ALL'
+output.filename.base <- '../../output/rf-bigdata-try5'
 
 data.filename.big <- '../../data/cohort-datadriven-02.csv'
 model.type <- 'rfsrc'
 n.data <- NA
 n.vars <- NA
-model.name <- 'rf-data-ALL'
-nsplit <- 20
-mtry <- 500
-n.trees <- 500
-
 
 surv.predict.old <- c('age', 'smokstatus', 'imd_score', 'gender')
 untransformed.vars <- c('time_death', 'endpoint_death', 'exclude')
@@ -60,6 +44,8 @@ percentMissing <- function(x) {
 
 missingness <- sapply(COHORT, percentMissing)
 
+
+
 bigdata.prefixes <-
   c(
     'hes.icd.',
@@ -80,10 +66,8 @@ bigdata.columns <-
     )
   ]
 
-# If n.vars was not set as NA, then thin out the variables to that number
 if(!is.na(n.vars)) {
-  bigdata.columns <-
-    bigdata.columns[order(missingness[bigdata.columns])[1:n.vars]]
+  bigdata.columns <- sort(missingness[bigdata.columns])[1:n.vars]
 }
 
 COHORT.bigdata <-
@@ -146,23 +130,18 @@ test.set <- testSetIndices(COHORT.bigdata, random.seed = 78361)
 
 surv.predict <- c(surv.predict.old, bigdata.columns)
 
-#' # Fitting
-#' 
-#' Let's fit the model...
-#+ rf_bigdata_fit, cache=cacheoption
-
 time.start <- handyTimer()
 surv.model.fit <-
   survivalFit(
     surv.predict,
     COHORT.bigdata[-test.set,],
     model.type = 'rfsrc',
-    n.trees = n.trees,
+    n.trees = 16,
     split.rule = split.rule,
-    n.threads = 20,
+    n.threads = 16,
     nimpute = 3,
-    nsplit = nsplit,
-    mtry = mtry,
+    nsplit = 10,
+    mtry = 500, # There are about 600 variables, so try most of them each time
     na.action = 'na.impute'
   )
 time.fit <- handyTimer(time.start)
@@ -181,9 +160,6 @@ time.cindex <- handyTimer(time.start)
 #+ resulting_fit
 
 print(surv.model.fit)
-
-# Save the model
-saveRDS(surv.model.fit, paste0(output.filename.base, '-model-fit.rds'))
 
 #' ## Timing
 #' 
@@ -217,26 +193,9 @@ calibration.score <- calibrationScore(calibration.table)
 
 calibrationPlot(calibration.table)
 
-# Save performance results
-varsToTable(
-  data.frame(
-    model = model.name,
-    imputation = FALSE,
-    discretised = FALSE,
-    c.index,
-    c.index.lower = NA,
-    c.index.upper = NA, # No bootstrapping implemented yet
-    calibration.score = calibration.score[['area']],
-    calibration.score.lower = NA,
-    calibration.score.upper = NA
-  ),
-  performance.file,
-  index.cols = c('model', 'imputation', 'discretised')
-)
-
 #' The area between the calibration curve and the diagonal is 
-#' **`r round(calibration.score[['area']], 3)`** +/-
-#' **`r round(calibration.score[['se']], 3)`**.
+#' **`r round(calibration.score['area'], 3)`** +/-
+#' **`r round(calibration.score['se'], 3)`**.
 #' 
 #' ## Variable importance
 #' 
@@ -244,21 +203,16 @@ varsToTable(
 vimp.df <-
   data.frame(
     var = names(var.imp$importance),
-    imp = normalise(var.imp$importance, max),
-    stringsAsFactors = FALSE
+    imp = normalise(var.imp$importance, max)
   )
 
-
 vimp.df <- lookUpDescriptions(vimp.df)
-
-vimp.df$missingness <- missingness[vimp.df$var]
 
 #' What are the most important variables?
 
 print(
   head(
-    vimp.df[order(vimp.df$imp, decreasing = TRUE),
-            c('imp', 'description', 'missingness')],
+    vimp.df[order(vimp.df$imp, decreasing = TRUE), c('description', 'imp')],
     20
   )
 )
@@ -267,104 +221,24 @@ print(
 #' 
 #' Plot the partial effects of the top 10 most significant variables
 
-# Add in a column for rounded time to death because that's the y-variable here
-COHORT.bigdata$surv_time_round <- round_any(COHORT.bigdata$surv_time, 0.1)
-
-risk.by.logical <- data.frame()
-
 for(variable in vimp.df$var[order(vimp.df$imp, decreasing = TRUE)[1:10]]) {
-  risk.by.variable <-
-    partialEffectTable(
-      surv.model.fit, COHORT.bigdata[-test.set, ], variable,
-      na.action = 'na.impute'
-    )
-  
-  if(is.logical(risk.by.variable[, variable])) {
-    # If it's a logical value, then make FALSE the baseline and just give values
-    # when true, and then append this data frame into a larger one storing all
-    # the values from logical variables
-    
-    # First, get average responses on a per-variable basis
-    
-    
-    risk.by.logical <-
-      rbind(
-        risk.by.logical,
-        data.frame(
-          # Store variable name
-          variable,
-          # And ratio of values associated with TRUEs and FALSEs
-          tf.ratio =
-            # Every 2nd one is a TRUE, because the values are sorted 
-            risk.by.variable[
-              seq.int(2, nrow(risk.by.variable), 2), 'risk.normalised'
-              ] /
-            # Conversely, all the odd rows are FALSE
-            risk.by.variable[
-              seq.int(1,nrow(risk.by.variable) - 1, 2), 'risk.normalised'
-              ]
-        )
-      )
-  }
+  risk.by.variable <- generalEffectDf(surv.model.fit, COHORT.bigdata, variable)
   
   # Get the mean of the normalised risk for every value of the variable
   risk.aggregated <-
     aggregate(
       as.formula(paste0('risk.normalised ~ ', variable)),
-      risk.by.variable, median
+      risk.by.variable, mean
     )
   
-  if(is.factor(risk.by.variable[, variable])) {
-    # If it's a factor, draw a bar chart for the per-level partial effects
-    print(
-      ggplot(risk.by.variable, aes_string(x = variable, y = 'risk.normalised')) +
-        geom_point(alpha = 0.01, position = position_jitter(w = 0.8, h = 0)) +
-        geom_bar(data = risk.aggregated, colour = 'blue', stat = 'identity')
-    )
-  } else if(is.numeric(risk.by.variable[, variable])) {
-    # If it's a number, draw a line plot across the range of values
-    
-    
-    # work out the limits on the x-axis by taking the 1st and 99th percentiles
-    x.axis.limits <-
-      quantile(COHORT.bigdata[, variable], c(0.01, 0.99), na.rm = TRUE)
-    print(
-      ggplot(risk.by.variable, aes_string(x = variable, y = 'risk.normalised')) +
-        geom_line(alpha=0.01, aes(group = id)) +
-        geom_line(data = risk.aggregated, colour = 'blue') +
-        coord_cartesian(xlim = c(x.axis.limits))
-    )
-  }
-}
-
-if(nrow(risk.by.logical) > 0) {
-  # If there were some logical variables in there, let's plot them all on one
-  # bar plot, much like the factor plot from before
-  
-  # Get the averaged risk for each variable
-  risk.aggregated <- aggregate(tf.ratio ~ variable, risk.by.logical, median)
+  # work out the limits on the x-axis by taking the 1st and 99th percentiles
+  x.axis.limits <-
+    quantile(COHORT.full[, variable], c(0.01, 0.99), na.rm = TRUE)
   
   print(
-    ggplot(risk.by.logical, aes(x = variable, y = tf.ratio)) +
-      geom_violin(draw_quantiles = c(0.25, 0.5, 0.75)) +
-      coord_cartesian(ylim = c(0, 2))
+    ggplot(risk.by.variable, aes_string(x = variable, y = 'risk.normalised')) +
+      geom_line(alpha=0.01, aes(group = id)) +
+      geom_line(data = risk.aggregated, colour = 'blue') +
+      coord_cartesian(xlim = c(x.axis.limits))
   )
 }
-
-#' ## Variable interactions
-#' 
-#' Let's see if there are any significant interactions between the most
-#' important variables...
-#' 
-#+ variable_interactions, cache=cacheoption
-
-time.start <- handyTimer()
-find.interaction(
-  surv.model.fit,
-  # Only look in the top few variables in terms of overall importance
-  xvar.names = vimp.df$var[order(vimp.df$imp, decreasing = TRUE)[1:10]],
-  method = 'vimp', importance = 'permute.ensemble', na.action = 'na.impute'
-)
-time.interactions <- handyTimer(time.start)
-
-#' Checking for variable interactions took `r round(time.interactions)` seconds.

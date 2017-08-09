@@ -12,7 +12,7 @@ opts_chunk$set(cache.lazy = FALSE)
 #' In difference to previous attempts at cross-validation, this uses between 10
 #' and 20 bins, not between 2 and 20, in an attempt to avoid throwing away data.
 
-output.filename.base <- '../../output/rfsrc-cv-nsplit-try1'
+output.filename.base <- '../../output/rfsrc-cv-nsplit-try2'
 data.filename <- '../../data/cohort-sanitised.csv'
 
 # If surv.vars is defined as a character vector here, the model only uses those

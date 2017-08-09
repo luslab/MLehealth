@@ -451,6 +451,41 @@ surv.model.fit.boot <-
     bootstraps = bootstraps
   )
 
+COHORT.bigdata$surv_time_round <- round_any(COHORT.bigdata$surv_time, tod.round)
+# Create a survival formula with the provided variable names...
+surv.formula <-
+  formula(
+    paste0(
+      # Survival object made in-formula
+      'Surv(surv_time_round, surv_event) ~ ',
+      # Predictor variables then make up the other side
+      paste(surv.predict.partial, collapse = '+')
+    )
+  )
+
+# rfsrc, if you installed it correctly, controls threading by changing an
+# environment variable
+options(rf.cores = n.threads)
+  
+surv.model.fit.boot <-  
+  boot(
+    formula = surv.formula,
+    data = COHORT.bigdata[-test.set, ],
+    statistic = bootstrapFitRfsrc,
+    R = bootstraps,
+    parallel = 'no',
+    ncpus = 1, # disable parallelism because rfsrc can be run in parallel
+    n.trees = n.trees,
+    test.data =  COHORT.bigdata[test.set, ],
+    # Boot requires named variables, so can't use ... here. This slight
+    # kludge means that this will fail unless these three variables are
+    # explicitly specified in the call.
+    nimpute = nimpute,
+    nsplit = nsplit,
+    na.action = 'na.impute'
+  )
+
+
 # Get coefficients and variable importances from bootstrap fits
 surv.model.fit.coeffs <- bootStats(surv.model.fit.boot, uncertainty = '95ci')
 

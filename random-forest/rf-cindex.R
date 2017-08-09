@@ -7,43 +7,35 @@ cacheoption <- FALSE
 # objects we wish to cache are large...
 opts_chunk$set(cache.lazy = FALSE)
 
-#' # Random survival forests on pre-imputed data
+#' # Random survival forests split on C-index
 #' 
-#' The imputation algorithm used for the Cox modelling 'cheats' in a couple of
-#' different ways. Firstly, the imputation model is fitted on the whole dataset,
-#' rather than training a model on a training set and then using it on the test
-#' set. Secondly, causality is violated in that future measurements and even the
-#' outcome variable (ie whether a patient died) is included in the model. The
-#' rationale for this is that you want to have the best and most complete
-#' dataset possible, and if doctors are going to go on and use this in clinical
-#' practice they will simply take the additional required measurements when
-#' calculating a patient's risk score, rather than trying to do the modelling on
-#' incomplete data.
-#' 
-#' However, this could allow the imputation to 'pass back' useful data to the
-#' Cox model, and thus artificially inflate its performance statistics.
-#' 
-#' It is non-trivial to work around this, not least because the imputation
-#' package we used does not expose the model to allow training on a subset of
-#' the data. A quick and dirty method to check whether this may be an issue,
-#' therefore, is to train a random forest model on the imputed dataset, and see
-#' if it can outperform the Cox model. So, let's try it...
+#' Most of our random forests are split by maximising the difference between
+#' branches as measured by the logrank test. In theory, since one of our two
+#' performance measures is C-index, splitting on C-index instead should allow
+#' a better performance. Let's try it...
 
 #+ user_variables, message=FALSE
 
-imputed.data.filename <- '../../data/COHORT_complete.rds'
-endpoint <- 'death.imputed'
+data.filename <- '../../data/cohort-sanitised.csv'
+endpoint <- 'death'
 
 n.trees <- 500
 n.split <- 10
-n.threads <- 40
+n.impute <- 3
+n.threads <- 20
 
 bootstraps <- 50
 
-output.filename.base <- '../../output/rf-imputed-try1'
+output.filename.base <- '../../output/rf-cindex-try1'
 boot.filename <- paste0(output.filename.base, '-boot.rds')
 
 # What to do with missing data
+continuous.vars <-
+  c(
+    'age', 'total_chol_6mo', 'hdl_6mo', 'pulse_6mo', 'crea_6mo',
+    'total_wbc_6mo', 'haemoglobin_6mo'
+  )
+untransformed.vars <- c('anonpatid', 'surv_time', 'imd_score', 'exclude')
 continuous.vars <-
   c(
     'age', 'total_chol_6mo', 'hdl_6mo', 'pulse_6mo', 'crea_6mo',
@@ -54,30 +46,41 @@ untransformed.vars <- c('anonpatid', 'surv_time', 'imd_score', 'exclude')
 source('../lib/shared.R')
 require(ggrepel)
 
-#' ## Read imputed data
+missingReplace <- NA # ie, don't change the values!
 
-# Load the data from its RDS file
-imputed.data <- readRDS(imputed.data.filename)
+#' ## Fit random forest model
 
-# Remove rows with death time of 0 to avoid fitting errors, and get the survival
-# columns ready
-for(i in 1:length(imputed.data)) {
-  imputed.data[[i]] <- imputed.data[[i]][imputed.data[[i]][, surv.time] > 0, ]
-  # Put in a fake exclude column for the next function (exclusions are already
-  # excluded in the imputed dataset)
-  imputed.data[[i]]$exclude <- FALSE
-  imputed.data[[i]]$imd_score <- as.numeric(imputed.data[[i]]$imd_score)
-  imputed.data[[i]] <-
-    caliberExtraPrep(
-      prepSurvCol(
-        imputed.data[[i]], 'time_death', 'endpoint_death', 1
-      )
-    )
-}
+# Load the data and convert to data frame to make column-selecting code in
+# prepData simpler
+COHORT.full <- data.frame(fread(data.filename))
 
-# Define test set
-test.set <- testSetIndices(imputed.data[[1]], random.seed = 78361)
+# Define process settings; at first, we're going to do nothing to anything
+# continuous, because we may want to make _missing columns which this function
+# can't do...
+process.settings <-
+  list(
+    var        = c(untransformed.vars, continuous.vars),
+    method     = rep(NA, length(untransformed.vars) + length(continuous.vars)),
+    settings   = rep(NA, length(untransformed.vars) + length(continuous.vars))
+  )
 
+COHORT.prep <-
+  prepData(
+    # Data for cross-validation excludes test set
+    COHORT.full,
+    cols.keep,
+    process.settings,
+    surv.time, surv.event,
+    surv.event.yes,
+    extra.fun = caliberExtraPrep
+  )
+n.data <- nrow(COHORT.prep)
+
+# Define indices of test set
+test.set <- testSetIndices(COHORT.prep, random.seed = 78361)
+
+# Now, process the data such that we can fit a model to it...
+COHORT.use <- prepCoxMissing(COHORT.prep, missingReplace = missingReplace)
 
 #' ## Fit random forest model
 
@@ -92,7 +95,9 @@ surv.model.fit <-
     n.trees = n.trees,
     split.rule = split.rule,
     n.threads = n.threads,
-    nsplit = n.split
+    nsplit = n.split,
+    na.action = 'na.impute',
+    nimpute = n.impute
   )
 time.fit <- handyTimer(time.start)
 
