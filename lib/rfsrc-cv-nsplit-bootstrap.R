@@ -239,7 +239,6 @@ surv.model.fit.boot <-
     n.threads = n.threads,
     nsplit = cv.performance[best.calibration.row1, 'n.splits'],
     nimpute = cv.performance[best.calibration.row1, 'n.imputations'],
-    na.action = 'na.impute',
     bootstraps = bootstraps
   )
 

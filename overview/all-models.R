@@ -6,8 +6,8 @@ models.performance <- readTablePlus('../../output/models-performance.tsv')
 models.performance$x.labels <-
   paste(
     models.performance$model,
-    'imputed=', models.performance$imputation,
-    'discrete=', models.performance$discretised
+    ifelse(models.performance$imputation, 'imp', ''),
+    ifelse(models.performance$discretised, 'disc', '')
   )
 
 
@@ -22,16 +22,16 @@ plot.c.index <-
   )
   
 plot.calibration <-
-  ggplot(models.performance, aes(x = x.labels, y = 1 - 2*calibration.score)) +
+  ggplot(models.performance, aes(x = x.labels, y = 1 - calibration.score)) +
   geom_bar(stat='identity', aes(fill = model)) +
   geom_errorbar(
     aes(
-      ymin = 1 - 2*calibration.score.lower, ymax = 1 - 2*calibration.score.upper
+      ymin = 1 - calibration.score.lower, ymax = 1 - calibration.score.upper
     ),
     width = 0.1
   ) +
   coord_cartesian(
-    ylim = c(0.7, 1.0)
+    ylim = c(0.8, 1.0)
   )
 
 plot_grid(

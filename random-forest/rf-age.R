@@ -32,7 +32,7 @@ continuous.vars <-
   )
 untransformed.vars <- c('anonpatid', 'time_death', 'imd_score', 'exclude')
 
-source('shared.R')
+source('../lib/shared.R')
 require(ggrepel)
 
 #' ## Load and prepare data
@@ -82,11 +82,11 @@ surv.model.fit <-
   survivalFit(
     surv.predict,
     COHORT.prep[-test.set,],
-    model.type = 'ranger',
+    model.type = 'rfsrc',
     n.trees = n.trees,
     split.rule = 'logrank',
-    n.threads = 8,
-    respect.unordered.factors = 'partition'
+    n.threads = 7,
+    nsplit = 20
   )
 
 print(surv.model.fit)
@@ -282,21 +282,23 @@ c.index.test.all.not.age <-
 #' just that as a final test.
 #+ predict_age, cache=cacheoption
 
+options(rf.cores = n.threads)
+
 age.model <-
-  ranger(
+  rfsrc(
     formula(
       paste0(
         # Predicting just the age
         'age ~ ',
         # Predictor variables then make up the other side
-        paste(surv.predict[surv.predict != 'age'], collapse = '+')
+        paste(surv.predict[!(surv.predict %in% c('age', 'most_deprived'))], collapse = '+')
       )
     ),
-    COHORT.prep[-test.set, ],
-    num.trees = n.trees,
-    splitrule = 'variance',
-    num.threads = 8,
-    respect.unordered.factors = 'partition'
+    COHORT.use[-test.set, ],
+    ntree = n.trees,
+    splitrule = 'mse',
+    na.action = 'na.impute',
+    nimpute = 3
   )
 
 age.predictions <- predict(age.model, COHORT.prep[test.set, ])

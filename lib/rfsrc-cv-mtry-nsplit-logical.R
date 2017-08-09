@@ -1,10 +1,10 @@
 bootstraps <- 3
 split.rule <- 'logrank'
-n.threads <- 19
+n.threads <- 20
 
 # Cross-validation variables
-ns.splits <- c(0, 5, 8, 10, 20)
-ms.try <- c(10, 20, 30, 40, 50)
+ns.splits <- c(0, 5, 10, 15, 20, 30)
+ms.try <- c(50, 100, 200, 300, 400)
 n.trees.cv  <- 500
 n.imputations <- 3
 cv.n.folds <- 3
@@ -60,7 +60,17 @@ if(!file.exists(calibration.filename)) {
           surv.model.fit, COHORT.cv[cv.folds[[j]],],
           na.action = 'na.impute'
         )
-      time.predict <- handyTimer(time.start)
+      time.c.index <- handyTimer(time.start)
+      
+      time.start <- handyTimer()
+      # Get C-index on validation set
+      calibration.score <-
+        calibrationScore(
+          calibrationTable(
+            surv.model.fit, COHORT.cv[cv.folds[[j]],], na.action = 'na.impute'
+          )
+        )
+      time.calibration <- handyTimer(time.start)
       
       # Append the stats we've obtained from this fold
       cv.fold.performance <-
@@ -73,7 +83,8 @@ if(!file.exists(calibration.filename)) {
             m.try = cv.vars$m.try[i],
             c.index.val,
             time.learn,
-            time.predict
+            time.c.index,
+            time.calibration
           )
         )
       

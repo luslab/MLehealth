@@ -42,17 +42,17 @@ endpoint <- 'death'
 
 old.coefficients.filename <- 'rapsomaniki-cox-values-from-paper.csv'
 
-output.filename.base <- '../../output/caliber-replicate-with-missing-survreg-2'
+output.filename.base <- '../../output/caliber-replicate-with-missing-survreg-5'
 
-bootstraps <- 100
-n.threads <- 8
+bootstraps <- 200
+n.threads <- 20
 
 # Create a few filenames from the base
-new.coefficients.filename <- paste0(output.filename.base, '-coeffs-2.csv')
+new.coefficients.filename <- paste0(output.filename.base, '-coeffs-3.csv')
 compare.coefficients.filename <-
-  paste0(output.filename.base, '-bootstrap-2.csv')
-cox.var.imp.perm.filename <- paste0(output.filename.base, '-var-imp-perm-2.csv')
-model.filename <- paste0(output.filename.base, '-model-bootstrap.rds')
+  paste0(output.filename.base, '-bootstrap-3.csv')
+cox.var.imp.perm.filename <- paste0(output.filename.base, '-var-imp-perm-3.csv')
+model.filename <- paste0(output.filename.base, '-surv-boot.rds')
 
 #' ## Setup
 
@@ -261,7 +261,12 @@ fit.exp.boot <-
 saveRDS(fit.exp.boot, model.filename)
 
 # Unpackage the uncertainties from the bootstrapped data
-fit.exp.boot.ests <-  bootStats(fit.exp.boot, uncertainty = '95ci')
+fit.exp.boot.ests <- bootStats(fit.exp.boot, uncertainty = '95ci')
+
+# Write the raw bootstrap estimates to a file
+write.csv(
+  fit.exp.boot.ests, paste0(output.filename.base, '-bootstrap-coeffs.csv')
+)
 
 # Save bootstrapped performance values
 varsToTable(

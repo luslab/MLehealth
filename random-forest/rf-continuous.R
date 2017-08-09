@@ -21,7 +21,7 @@ output.base <- '../../output/rf-continuous-try7'
 endpoint <- 'death' # Change to MI to look for MI...anything else uses death
 
 n.trees <- 5000
-n.imputations <- 5
+n.imputations <- 3
 n.splits <- 10
 n.threads <- 40
 # What to do with missing data
@@ -105,7 +105,7 @@ c.index.test <- cIndex(surv.model.fit, COHORT.use[test.set, ],
 #' 
 #' 
 calibration.table <-
-  calibrationTable(fit.exp, COHORT.scaled.demissed[test.set, ])
+  calibrationTable(surv.model.fit, COHORT.scaled.demissed[test.set, ])
 
 calibration.score <- calibrationScore(calibration.table)
 
@@ -117,21 +117,21 @@ calibrationPlot(calibration.table)
 #' 
 
 # Save the model performance
-varsToTable(
-  data.frame(
-    model = 'rfsrc',
-    imputation = FALSE,
-    discretised = FALSE,
-    c.index = c.index.test,
-    c.index.lower = NA, # bootstrapping not yet implemented
-    c.index.upper = NA,
-    calibration.score = calibration.score[['area']],
-    calibration.score.lower = NA, # bootstrapping not yet implemented
-    calibration.score.upper = NA
-  ),
-  performance.file,
-  index.cols = c('model', 'imputation', 'discretised')
-)
+# varsToTable(
+#   data.frame(
+#     model = 'rfsrc',
+#     imputation = FALSE,
+#     discretised = FALSE,
+#     c.index = c.index.test,
+#     c.index.lower = NA, # bootstrapping not yet implemented
+#     c.index.upper = NA,
+#     calibration.score = calibration.score[['area']],
+#     calibration.score.lower = NA, # bootstrapping not yet implemented
+#     calibration.score.upper = NA
+#   ),
+#   performance.file,
+#   index.cols = c('model', 'imputation', 'discretised')
+# )
 
 
 #' ## Model fit

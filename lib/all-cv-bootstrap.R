@@ -4,7 +4,7 @@ bootstraps <- 200
 n.trees <- 500
 # The following two variables are only relevant if the model.type is 'ranger'
 split.rule <- 'logrank'
-n.threads <- 8
+n.threads <- 20
 
 # Cross-validation variables
 input.n.bins <- 10:20
@@ -253,7 +253,7 @@ surv.model.fit <-
     n.threads = n.threads
   )
 
-# Fir with bootstrapping to get better parameter estimates
+# Fit with bootstrapping to get better parameter estimates
 surv.model.fit.boot <-
   survivalBootstrap(
     surv.predict,
@@ -263,11 +263,10 @@ surv.model.fit.boot <-
     n.trees = n.trees,
     split.rule = split.rule,
     n.threads = n.threads,
-    bootstraps = bootstraps
+    bootstraps = 3
   )
 
 # Save the fit object
-saveRDS(surv.model.fit.boot, paste0(output.filename.base, '-surv-model.rds'))
+saveRDS(surv.model.fit.boot, paste0(output.filename.base, '-surv-boot.rds'))
 
-# Get C-indices for training and test sets
 surv.model.fit.coeffs <-  bootStats(surv.model.fit.boot, uncertainty = '95ci')
