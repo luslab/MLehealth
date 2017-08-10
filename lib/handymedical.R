@@ -815,8 +815,7 @@ bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
     c(
       coef(fit),
       var.imp.vector,
-      c.train = cIndex(fit, data),
-      c.test = cIndex(fit, test.data),
+      c.index = cIndex(fit, test.data),
       calibration.score =
         # Only the area, let's not return the standard error for now...
         calibrationScore(calibrationTable(fit, test.data))$area
