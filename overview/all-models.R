@@ -1,15 +1,33 @@
+models.include <-
+  c(
+    'age', 'cox', 'cox disc', 'cox imp', 'cox imp disc', 'rfsrc', 'rfsrc imp',
+    'rf-varselrf' # in future, remove rf-varselrf and replace with logrank,
+    # add big discrete cox model (can't decide on order for clearest labelling)
+  )
+
 source('../lib/handy.R')
 requirePlus('ggplot2', 'cowplot')
 
-models.performance <- readTablePlus('../../output/models-performance.tsv')
+models.performance.all <- readTablePlus('../../output/models-performance.tsv')
 
-models.performance$x.labels <-
-  paste(
-    models.performance$model,
-    ifelse(models.performance$imputation, 'imp', ''),
-    ifelse(models.performance$discretised, 'disc', '')
+models.performance.all$x.labels <-
+  paste0(
+    models.performance.all$model,
+    ifelse(models.performance.all$imputation, ' imp', ''),
+    ifelse(models.performance.all$discretised, ' disc', '')
   )
 
+models.performance <- data.frame()
+for(model in models.include) {
+  models.performance <-
+    rbind(
+      models.performance,
+      models.performance.all[models.performance.all$x.labels == model, ]
+    )
+}
+# Turn this into a factor with defined levels so ggplot respects the order above
+models.performance$x.labels <-
+  factor(models.performance$x.labels, levels = models.include)
 
 plot.c.index <-
   ggplot(models.performance, aes(x = x.labels, y = c.index)) +
@@ -19,7 +37,8 @@ plot.c.index <-
   ) +
   coord_cartesian(
     ylim = c(0.7, 0.8)
-  )
+  ) +
+  theme(legend.position = "none")
   
 plot.calibration <-
   ggplot(models.performance, aes(x = x.labels, y = 1 - calibration.score)) +
@@ -32,10 +51,19 @@ plot.calibration <-
   ) +
   coord_cartesian(
     ylim = c(0.8, 1.0)
-  )
+  ) +
+  theme(legend.position = "none")
 
 plot_grid(
   plot.c.index, plot.calibration,
   labels = c("A", "B"),
   align = "v", ncol = 1
+)
+
+ggsave(
+  '../../output/all-models-performance.pdf',
+  width = 16,
+  height = 10,
+  units = 'cm',
+  useDingbats = FALSE
 )
