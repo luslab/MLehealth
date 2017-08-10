@@ -9,8 +9,41 @@ cox.missing.riskcats.filename <- 'caliber-replicate-with-missing-survreg-3-risk-
 
 data.filename <- '../../data/cohort-sanitised.csv'
 
-
-
+survPlots <- function(...) {
+  surv.fits <- list(...)
+  
+  df <- data.frame()
+  for(i in 1:length(surv.fits)) {
+    df <-
+      rbind(
+        df,
+        data.frame(
+          variable = as.character(surv.fits[[i]]$call)[2],
+          stratum = '1',
+          time = surv.fits[[i]][1]$time,
+          surv = surv.fits[[i]][1]$surv,
+          lower = surv.fits[[i]][1]$lower,
+          upper = surv.fits[[i]][1]$upper
+        ),
+        data.frame(
+          variable = as.character(surv.fits[[i]]$call)[2],
+          stratum = '2',
+          time = surv.fits[[i]][2]$time,
+          surv = surv.fits[[i]][2]$surv,
+          lower = surv.fits[[i]][2]$lower,
+          upper = surv.fits[[i]][2]$upper
+        )
+      )
+  }
+  
+  ggplot(
+    df,
+    aes(x = time, y = surv, ymin = lower, ymax = upper)
+  ) +
+    geom_line(aes(colour = stratum)) +
+    geom_ribbon(aes(fill = stratum), alpha = 0.4) +
+    facet_grid(variable ~ .)
+}
 
 cox.missing.boot <- readRDS(file.path(models.base, cox.missing.filename))
 
@@ -56,53 +89,51 @@ risk.violins.plot <-
         y = our_value,
         label = quantity.level
       )
-    )
+    ) +
+  scale_y_continuous(breaks = c(0.75, 1.0, 1.25, 1.5))
 
 
 # Kaplan-Meier survival curves for a few example variables being missing
 COHORT <- fread(data.filename)
 COHORT <- subset(COHORT, !exclude & time_death > 0)
 
+# Calculate the curves
 km.hdl <-
-  survfit(
+ survfit(
     Surv(time_death, endpoint_death == 'Death') ~ is.na(hdl_6mo),
     data = COHORT
-  )
-
-km.hdl.plot <-
-  ggsurvplot(
-    km.hdl, data = COHORT, conf.int = TRUE, censor = FALSE, legend = 'none'
-  )
-
+ )
 km.total_chol <-
   survfit(
     Surv(time_death, endpoint_death == 'Death') ~ is.na(total_chol_6mo),
     data = COHORT
   )
-
-km.total_chol.plot <-
-  ggsurvplot(km.total_chol, data = COHORT, conf.int = TRUE, censor = FALSE, legend = 'none')
-
 km.crea <-
   survfit(
     Surv(time_death, endpoint_death == 'Death') ~ is.na(crea_6mo),
     data = COHORT
   )
 
-km.crea.plot <-
-  ggsurvplot(km.crea_6mo, data = COHORT, conf.int = TRUE, censor = FALSE, legend = 'none')
+km.missingness <-
+  survPlots(km.hdl, km.total_chol, km.crea) +
+  theme(
+    legend.position = "none",
+    # Remove grey labels on facets
+    strip.background = element_blank(),
+    strip.text = element_blank()
+  )
 
-
-
-
+theme_set(theme_cowplot(font_size = 10))
 plot_grid(
   disc.vs.cont.risks.plot, risk.violins.plot,
-  #labels = c("A", "B"),
-  align = "v", nrow = 1
+  km.missingness,
+  labels = c("A", "B", "C"),
+  align = "h", nrow = 1
 )
-
-
-arrange_ggsurvplots(
-  list(km.hdl.plot, km.total_chol.plot, km.crea.plot),
-  ncol = 1, nrow = 3
-  )
+ggsave(
+  '../../output/missing-values-risk.pdf',
+  width = 16,
+  height = 5,
+  units = 'cm',
+  useDingbats = FALSE
+)
