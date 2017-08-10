@@ -7,7 +7,8 @@ cacheoption <- TRUE
 # objects we wish to cache are large...
 opts_chunk$set(cache.lazy = FALSE)
 
-#' # Variable selection in data-driven health records
+#' # Variable selection in data-driven health records with discretised
+#' # Cox models
 #' 
 #' Having extracted around 600 variables which occur most frequently in patient
 #' records, let's try to narrow these down using a methodology based on varSelRf
@@ -150,9 +151,6 @@ if(!is.na(n.data)) {
   COHORT.bigdata <- sample.df(COHORT.bigdata, n.data)
 }
 
-# Define test set
-test.set <- testSetIndices(COHORT.bigdata, random.seed = 78361)
-
 # Start by predicting survival with all the variables provided
 surv.predict <- c(surv.predict.old, bigdata.columns)
 
@@ -266,15 +264,20 @@ names(COHORT.prep)[names(COHORT.prep) == 'surv_event.1'] <- 'surv_event'
 # Further kludge...remove negative survival times
 COHORT.prep <- subset(COHORT.prep, surv_time > 0)
 
-#' ## Run random forest calibration
+# Define test set
+test.set <- testSetIndices(COHORT.prep, random.seed = 78361)
+
+#' ## Run variable selection
 #' 
-#' If there's not already a calibration file, we run the rfVarSel methodology:
-#'   1. Fit a big forest to the whole dataset to obtain variable importances.
+#' If there's not already a calibration file, we run our variable selection
+#' algorithm:
+#'   1. Perform logrank tests on survival curves of subsets of the data to find
+#'      those variables which seemingly have the largest effect on survival.
 #'   2. Cross-validate as number of most important variables kept is reduced.
 #' 
 #' (If there is already a calibration file, just load the previous work.)
 #' 
-#+ rf_var_sel_calibration
+#+ cox_var_sel_calibration
 
 # If we've not already done a calibration, then do one
 if(!file.exists(calibration.filename)) {
@@ -433,7 +436,7 @@ print(
 #' ## Perform the final fit
 #' 
 #' Having found the best number of variables by cross-validation, let's perform
-#' the final fit with the full training set and `r n.trees.final` trees.
+#' the final fit with the full training set.
 #' 
 #+ final_fit
 
@@ -448,22 +451,21 @@ time.fit.final <- handyTimer(time.start)
 
 saveRDS(surv.model.fit.final, paste0(output.filename.base, '-finalmodel.rds'))
 
-#' Final model of `r n.trees.final` trees fitted in `r round(time.fit.final)`
-#' seconds! 
+#' Final model of fitted in `r round(time.fit.final)` seconds! 
 #' 
 #' Also bootstrap this final fitting stage. A fully proper bootstrap would
 #' iterate over the whole model-building process including variable selection,
 #' but that would be prohibitive in terms of computational time.
 #' 
 #+ bootstrap_final
-
 surv.model.fit.boot <-
   survivalBootstrap(
     surv.predict.partial,
-    COHORT.bigdata[-test.set,], # Training set
-    COHORT.bigdata[test.set,],  # Test set
+    COHORT.prep[-test.set,], # Training set
+    COHORT.prep[test.set,],  # Test set
     model.type = 'survreg',
-    bootstraps = bootstraps
+    bootstraps = bootstraps,
+    n.threads = n.threads
   )
 
 # Get coefficients and variable importances from bootstrap fits
@@ -473,13 +475,13 @@ surv.model.fit.coeffs <- bootStats(surv.model.fit.boot, uncertainty = '95ci')
 #' 
 #' ### C-index
 #' 
-#' C-indices are **`r round(surv.model.fit.coeffs['c.train', 'val'], 3)`
-#' (`r round(surv.model.fit.coeffs['c.train', 'lower'], 3)` - 
-#' `r round(surv.model.fit.coeffs['c.train', 'upper'], 3)`)**
+#' C-indices are **`r round(surv.model.fit.coeffs['c.index', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['c.index', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['c.index', 'upper'], 3)`)**
 #' on the training set and
-#' **`r round(surv.model.fit.coeffs['c.test', 'val'], 3)`
-#' (`r round(surv.model.fit.coeffs['c.test', 'lower'], 3)` - 
-#' `r round(surv.model.fit.coeffs['c.test', 'upper'], 3)`)** on the test set.
+#' **`r round(surv.model.fit.coeffs['c.index', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['c.index', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['c.index', 'upper'], 3)`)** on the test set.
 #' 
 #'
 #' ### Calibration
@@ -496,12 +498,7 @@ surv.model.fit.coeffs <- bootStats(surv.model.fit.boot, uncertainty = '95ci')
 #+ calibration_plot
 
 calibration.table <-
-  calibrationTable(
-    # Standard calibration options
-    surv.model.fit.final, COHORT.bigdata[test.set,],
-    # Always need to specify NA imputation for rfsrc
-    na.action = 'na.impute'
-  )
+  calibrationTable(surv.model.fit.final, COHORT.prep[test.set,])
 
 calibration.score <- calibrationScore(calibration.table)
 
@@ -519,9 +516,9 @@ varsToTable(
     model = 'cox-logrank',
     imputation = FALSE,
     discretised = TRUE,
-    c.index = surv.model.fit.coeffs['c.test', 'val'],
-    c.index.lower = surv.model.fit.coeffs['c.test', 'lower'],
-    c.index.upper = surv.model.fit.coeffs['c.test', 'upper'],
+    c.index = surv.model.fit.coeffs['c.index', 'val'],
+    c.index.lower = surv.model.fit.coeffs['c.index', 'lower'],
+    c.index.upper = surv.model.fit.coeffs['c.index', 'upper'],
     calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
     calibration.score.lower =
       surv.model.fit.coeffs['calibration.score', 'lower'],
