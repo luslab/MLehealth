@@ -17,7 +17,19 @@ sample.df <- function(df, size = 1, replace = FALSE, prob = NULL) {
   # Returns:
   #   size rows from this data frame (default 1), with or without replacement
   #   and with an optional probability vector.
-  df[sample(nrow(df), size, replace, prob), ]
+  df[sample(nrow(df), size, replace, prob), , drop = FALSE]
+}
+
+bootstrapSampleDf <- function(df) {
+  # Quick wrapper function for simple bootstrap sampling of a data frame.
+  #
+  # Args:
+  #      df: A data frame.
+  #
+  # Returns:
+  #  A data frame with the same number of rows as the original, but randomly
+  #  sampled with replacement.
+  sample.df(df, size = nrow(df), replace = TRUE)
 }
 
 withoutCols <- function(df, cols) {
@@ -892,8 +904,9 @@ requirePlus <- function(..., install = TRUE, quietly = TRUE) {
   package.list <- c(...)
   # if the install parameter is true, install missing packages
   if(install) {
-    message('Checking for missing packages...')
+    # Check for missing packages
     packages.present <- package.list %in% rownames(installed.packages())
+    # And, if there are any, install them
     if(any(!packages.present)) {
       message(
         paste('Installing missing packages',
@@ -910,13 +923,18 @@ requirePlus <- function(..., install = TRUE, quietly = TRUE) {
       lapply(package.list, require, character.only = TRUE, quietly = quietly)
     )
   )
-  if(sum(require.success) > 0) {
+  
+  # If at least some packages imported successfully and the user hasn't asked
+  # for quietness...
+  if(sum(require.success) > 0 & !quietly) {
     message(
       paste('Successfully imported packages',
             paste(package.list[require.success], collapse = ', ')
       )
     )
   }
+  
+  # If at least some packages failed, warn the user regardless of quietly arg
   if(sum(!require.success) > 0) {
     warning(
       paste('Failed to import packages',
@@ -926,19 +944,28 @@ requirePlus <- function(..., install = TRUE, quietly = TRUE) {
   }
 }
 
-initParallel <- function(cores = NULL) {
+initParallel <- function(cores = NULL, backend = 'doMC') {
   # Wrapper to initialise parallel computing functionality.
   #
   # Args:
   #   cores: The number of cores to use simultaneously. If absent, use the
-  #          default from registerDoMC, 'approximately half the number of
-  #          cores detected by the parallel package'.
+  #          default from the relevant backend.
+  # backend: Which backend to use. Currently supports doMC and doParallel.
   #
   # Returns:
   #   Nothing.
-  require(doMC)
-  registerDoMC(cores)
-  require(foreach)
+  
+  if(backend == 'doMC') {
+    requirePlus('doMC', 'foreach')
+    registerDoMC(cores)
+  } else if(backend == 'doParallel') {
+    requirePlus('doParallel', 'foreach')
+    cl <- makeCluster(cores)
+    registerDoParallel(cl)
+    return(cl)
+  } else {
+    stop('Unrecognised backend', backend)
+  }
 }
 
 inRange <-
