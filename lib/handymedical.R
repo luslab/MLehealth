@@ -936,6 +936,16 @@ bootStats <- function(bootfit, uncertainty = 'sd', transform = identity) {
   }
 }
 
+bootStatsDf <- function(df, transform = identity) {
+  data.frame(
+    val = sapply(df, FUN = function(x) {median(transform(x))}),
+    lower =
+      sapply(df, FUN = function(x) {quantile(transform(x), probs = c(0.025))}),
+    upper =
+      sapply(df, FUN = function(x) {quantile(transform(x), probs = c(0.975))})
+  )
+}
+
 bootMIStats <- function(boot.mi, uncertainty = '95ci', transform = identity) {
   # Return a data frame with the statistics from a bootstrapped fit
   #
