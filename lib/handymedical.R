@@ -682,10 +682,56 @@ survivalFit <- function(
   }
 }
 
+survivalFitBoot <- function(
+  predict.vars, df, df.test, model.type = 'cph',
+  n.trees = 500, split.rule = 'logrank', n.threads = 1, tod.round = 0.1,
+  bootstraps = 200, ...
+) {
+  
+  # Initialise parallel processing with the number of threads specified
+  cl <- initParallel(n.threads, backend = 'doParallel')
+  
+  # Run a parallel foreach loop to get the bootstrapped parameter estimates.
+  # It returns a data frame which will then be returned from this function.
+  output <- foreach(
+    i = 1:bootstraps, .combine = cbind,
+    .packages = c('survival', 'randomForestSRC')
+  ) %dopar% {
+    
+    # Bootstrap-sampled training set
+    df.boot <- bootstrapSampleDf(df)
+    
+    surv.model.fit.i <-
+      survivalFit(
+        predict.vars, df, model.type = model.type,
+        n.trees = n.trees, split.rule = split.rule,
+        # 1 thread, because we're parallelising the bootstrapping
+        n.threads = 1,
+        ...
+      )
+    
+    # Work out other quantities of interest
+    var.imp.vector <- bootstrapVarImp(surv.model.fit.i, df.boot)
+    c.index <- cIndex(surv.model.fit.i, df.test)
+    calibration.score <- calibrationScoreWrapper(surv.model.fit.i, df.test)
+    
+    data.frame(
+      t(coef(surv.model.fit.i)),
+      t(var.imp.vector),
+      c.index,
+      calibration.score
+    )
+  }
+  
+  stopCluster(cl)
+  
+  output
+}
+
 survivalBootstrap <- function(
   predict.vars, df, df.test, model.type = 'survreg',
   n.trees = 500, split.rule = 'logrank', n.threads = 1, tod.round = 0.1,
-  bootstraps = 200, ...
+  bootstraps = 200, nimpute = 1, nsplit = 0
 ) {
   
   # Depending on model.type, change the name of the variable for survival time
