@@ -461,6 +461,8 @@ modelFactorLevelName <- function(factor.name, level.name, model.type) {
   } else if(model.type == 'boot.survreg') {
     # factorLevel
     return(paste0(factor.name, level.name))
+  } else if(model.type == 'boot.foreach') {
+    return(make.names(paste0(factor.name, level.name)))
   }
 }
 
