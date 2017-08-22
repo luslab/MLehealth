@@ -21,7 +21,7 @@ endpoint <- 'death.imputed'
 
 old.coefficients.filename <- 'rapsomaniki-cox-values-from-paper.csv'
 
-output.filename.base <- '../../output/caliber-replicate-imputed-survreg-3'
+output.filename.base <- '../../output/caliber-replicate-imputed-survreg-4'
 
 
 cox.var.imp.perm.filename <-
@@ -65,6 +65,8 @@ test.set <- testSetIndices(imputed.data[[1]], random.seed = 78361)
 #' let's go through and transform our input variables in the same way...
 
 source('caliber-scale.R')
+# Remove the age splining
+ageSpline <- identity
 
 for(i in 1:length(imputed.data)) {
   imputed.data[[i]] <- caliberScale(imputed.data[[i]], surv.time, surv.event)
@@ -183,9 +185,9 @@ varsToTable(
     model = 'cox',
     imputation = TRUE,
     discretised = FALSE,
-    c.index = fit.exp.boot.ests['c.test', 'val'],
-    c.index.lower = fit.exp.boot.ests['c.test', 'lower'],
-    c.index.upper = fit.exp.boot.ests['c.test', 'upper'],
+    c.index = fit.exp.boot.ests['c.index', 'val'],
+    c.index.lower = fit.exp.boot.ests['c.index', 'lower'],
+    c.index.upper = fit.exp.boot.ests['c.index', 'upper'],
     calibration.score = fit.exp.boot.ests['calibration.score', 'val'],
     calibration.score.lower = fit.exp.boot.ests['calibration.score', 'lower'],
     calibration.score.upper = fit.exp.boot.ests['calibration.score', 'upper']
@@ -229,8 +231,7 @@ calibration.score <- calibrationScore(calibration.table)
 calibrationPlot(calibration.table)
 
 #' The area between the calibration curve and the diagonal is 
-#' **`r round(calibration.score[['area']], 3)`** +/-
-#' **`r round(calibration.score[['se']], 3)`**.
+#' **`r round(calibration.score, 3)`**.
 #'  
 #' ## Coefficients
 #' 
