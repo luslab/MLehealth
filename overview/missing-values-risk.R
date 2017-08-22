@@ -7,6 +7,10 @@ cox.missing.filename <- 'caliber-replicate-with-missing-model-survreg-bootstrap-
 cox.missing.riskdists.filename <- 'caliber-replicate-with-missing-survreg-3-risk-violins.csv'
 cox.missing.riskcats.filename <- 'caliber-replicate-with-missing-survreg-3-risk-cats.csv'
 
+cox.imp.filename <- 'caliber-replicate-imputed-survreg-4-surv-boot-imp.rds'
+
+cox.disc.filename <- 'all-cv-survreg-boot-try5-surv-boot.csv'
+
 data.filename <- '../../data/cohort-sanitised.csv'
 
 survPlots <- function(...) {
@@ -46,20 +50,51 @@ survPlots <- function(...) {
 }
 
 cox.missing.boot <- readRDS(file.path(models.base, cox.missing.filename))
+fit.risks.miss <- bootStats(cox.missing.boot, '95ci')
+fit.risks.miss$var <- rownames(fit.risks.miss)
 
-fit.risks <- bootStats(cox.missing.boot, '95ci')
+cox.imp.boot <- readRDS(file.path(models.base, cox.imp.filename))
+fit.risks.imp <- bootMIStats(cox.imp.boot, '95ci')
+fit.risks.imp$var <- rownames(fit.risks.imp)
+
+cox.disc.boot <- read.csv(file.path(models.base, cox.disc.filename))
+fit.risks.disc <- bootStatsDf(cox.disc.boot)
+fit.risks.disc$var <- rownames(fit.risks.disc)
+
+# Create two data frames, one for missing vs imputed and one for discrete 
+fit.risks.imp.vs.miss <- merge(fit.risks.imp, fit.risks.miss, by = c('var'))
+fit.risks.imp.vs.miss$model <- 'miss'
+# This is a slight cheat... The discrete model here was done by my home-made
+# bootstrap function, whose variable/level names have been preprocessed with
+# make.names for slightly annoying internal reasons. Luckily, all the logical
+# variables escape unscathed from this, and they're the only ones we can compare
+# anyway!
+fit.risks.imp.vs.disc <- merge(fit.risks.imp, fit.risks.disc, by = c('var'))
+fit.risks.imp.vs.disc$model <- 'disc'
+
+fit.risks <- rbind(fit.risks.imp.vs.miss, fit.risks.imp.vs.disc)
+
+# Lose a few irrelevant variables
+fit.risks <- 
+  subset(
+    fit.risks, !(var %in% c('(Intercept)', 'c.index', 'calibration.score'))
+  )
+
+# Make them
 
 disc.vs.cont.risks.plot <-
   ggplot(
     fit.risks,
     aes(
-      x = val, xmin = lower, xmax = upper,
-      y = val, ymin = lower, ymax = upper
+      x = val.x, xmin = lower.x, xmax = upper.x,
+      y = val.y, ymin = lower.y, ymax = upper.y,
+      label = var, colour = model
     )
   ) +
   geom_point() +
   geom_errorbar() +
-  geom_errorbarh()
+  geom_errorbarh() +
+  geom_text()
 
 
 
