@@ -1,4 +1,8 @@
 source('../lib/shared.R')
+requirePlus('cowplot')
+
+# Amount of padding at the right-hand side to make space for missing values
+missing.padding <- 0.05
 
 continuous.vars <-
   c(
@@ -11,7 +15,7 @@ surv.model.fit.boot <- readRDS('../../output/all-cv-survreg-boot-try5-surv-model
 
 # Pull coefficients from model with missing data
 caliber.missing.coefficients.filename <-
-  '../../output/caliber-replicate-with-missing-survreg-bootstrap-coeffs-1.csv'
+  '../../output/caliber-replicate-with-missing-survreg-6-linear-age-coeffs-3.csv'
 caliber.missing.coeffs <- read.csv(caliber.missing.coefficients.filename)
 # Log them to get them on the same scale as discrete model
 caliber.missing.coeffs$our_value <- -log(caliber.missing.coeffs$our_value)
@@ -95,8 +99,11 @@ cph.coeffs <- cphCoeffs(
 # We'll need the CALIBER scaling functions for plotting
 source('../cox-ph/caliber-scale.R')
 
-# set up a list to store the plotted plots
+# set up list to store the plots
 cox.discrete.plots <- list()
+# Add dummy columns for x-position of missing values
+caliber.missing.coeffs$missing.x.pos.cont <- NA
+cph.coeffs$missing.x.pos.disc <- NA
 
 for(variable in unique(cph.coeffs$var)) {
   # If it's a continuous variable, get the real centres of the bins
@@ -138,9 +145,13 @@ for(variable in unique(cph.coeffs$var)) {
                              cph.coeffs$level != 'missing'][
                                length(variable.quantiles) - 1]
       
-      # work out the limits on the x-axis by taking the 1st and 99th percentiles
-      x.axis.limits <- quantile(COHORT.use[, variable], c(0.01, 0.99), na.rm = TRUE)
+      # Work out data range by taking the 1st and 99th percentiles
       # Use the max to provide a max value for the final bin
+      # Also use for x-axis limits, unless there are missing values to
+      # accommodate on the right-hand edge.
+      x.data.range <-
+        quantile(COHORT.use[, variable], c(0.01, 0.99), na.rm = TRUE)
+      x.axis.limits <- x.data.range
       
       
       # Finally, we need to scale this such that the baseline value is equal
@@ -181,38 +192,39 @@ for(variable in unique(cph.coeffs$var)) {
         geom_step() +
         geom_step(aes(y = lower), colour = 'grey') +
         geom_step(aes(y = upper), colour = 'grey') +
-        #geom_text(aes(label = bin.min), angle = 90, hjust = 0) +
-        # Missing values central estimate
-        coord_cartesian(xlim = c(x.axis.limits)) +
         ggtitle(variable)
       
       # If there's a missing value risk, add it
       if(any(cph.coeffs$var == variable & cph.coeffs$level == 'missing')) {
+        # Expand the x-axis to squeeze the missing values in
+        x.axis.limits[2] <- 
+          x.axis.limits[2] + diff(x.data.range) * missing.padding
+        # Put this missing value a third of the way into the missing area
+        cph.coeffs$missing.x.pos.disc[
+          cph.coeffs$var == variable &
+          cph.coeffs$level == 'missing'] <-
+          x.axis.limits[2] + diff(x.data.range) * missing.padding / 3
+
+        # Add the point to the graph (we'll set axis limits later)
         cox.discrete.plot <-
           cox.discrete.plot +
           geom_pointrange(
             data = cph.coeffs[cph.coeffs$var == variable & 
                                 cph.coeffs$level == 'missing', ],
             aes(
-              x = x.axis.limits[2], # Place at the right-hand edge of plot
-              y = val,
-              ymin = lower,
+              x = missing.x.pos.disc,
+              y = val, ymin = lower,
               ymax = upper
             ),
             colour = 'red'
           )
       }
       
-      # Now, let's add the line from the continuous Cox model
+      # Now, let's add the line from the continuous Cox model. We only need two
+      # points because the lines are straight!
       continuous.cox <-
         data.frame(
-          # Use 1000 values for a smooth line
-          var.x.values =
-            seq(
-              quantile(COHORT.use[, variable], 0.01, na.rm = TRUE),
-              quantile(COHORT.use[, variable], 0.99, na.rm = TRUE),
-              length.out = 1000
-            )
+          var.x.values = x.data.range
         )
       # Scale the x-values
       continuous.cox$var.x.scaled <-
@@ -252,6 +264,13 @@ for(variable in unique(cph.coeffs$var)) {
       # If there is one, add missing value risk from the continuous model
       if(any(caliber.missing.coeffs$quantity == paste0(variable, '_missing') &
              caliber.missing.coeffs$unit == 'missing')) {
+        
+        # Put this missing value 2/3rds of the way into the missing area
+        caliber.missing.coeffs$missing.x.pos.cont[
+          caliber.missing.coeffs$quantity == paste0(variable, '_missing') &
+            caliber.missing.coeffs$unit == 'missing'] <-
+                x.axis.limits[2] + 2 * diff(x.data.range) * missing.padding / 3
+        
         cox.discrete.plot <-
           cox.discrete.plot +
           geom_pointrange(
@@ -260,20 +279,27 @@ for(variable in unique(cph.coeffs$var)) {
                 caliber.missing.coeffs$unit == 'missing',
               ],
             aes(
-              x = x.axis.limits[2] - diff(x.axis.limits)/100, # Just before RHS
-              y = our_value,
-              ymin = our_lower,
-              ymax = our_upper
+              x = missing.x.pos.cont,
+              y = our_value, ymin = our_lower, ymax = our_upper
             ),
             colour = 'blue'
           )
       }
+      
+      # Finally, set the x-axis limits; will just be the data range, or data
+      # range plus a bit if there are missing values to squeeze in
+      cox.discrete.plot <-
+        cox.discrete.plot +
+        coord_cartesian(xlim = x.axis.limits)
       
       cox.discrete.plots[[variable]] <- cox.discrete.plot
     }
   }
 }
 
-ggplot(subset(cph.coeffs, var == 'age'), aes(x = bin.max, y = val)) +
-  geom_step() +
-  geom_line(data = df, aes(x, y/10))
+plot_grid(
+  cox.discrete.plots[[1]], cox.discrete.plots[[2]], cox.discrete.plots[[3]],
+  cox.discrete.plots[[4]], cox.discrete.plots[[5]], cox.discrete.plots[[6]],
+  labels = c('A', rep('', 5)),
+  align = "v", ncol = 6
+)
