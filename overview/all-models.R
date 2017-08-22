@@ -17,6 +17,12 @@ models.performance.all$x.labels <-
     ifelse(models.performance.all$discretised, ' disc', '')
   )
 
+# Currently different scripts quote either the area under the curve or a pre
+# one-minused the area under the curve...so standardise that
+big.calibration.scores <- models.performance.all$calibration.score > 0.5
+models.performance.all[big.calibration.scores, c('calibration.score', 'calibration.score.lower', 'calibration.score.upper')] <-
+  1 - models.performance.all[big.calibration.scores, c('calibration.score', 'calibration.score.lower', 'calibration.score.upper')]
+
 models.performance <- data.frame()
 for(model in models.include) {
   models.performance <-
