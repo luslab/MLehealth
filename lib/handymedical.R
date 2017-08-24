@@ -685,49 +685,101 @@ survivalFit <- function(
 }
 
 survivalFitBoot <- function(
-  predict.vars, df, df.test, model.type = 'cph',
-  n.trees = 500, split.rule = 'logrank', n.threads = 1, tod.round = 0.1,
-  bootstraps = 200, ...
+  predict.vars, df, df.test, model.type = 'cph', bootstraps = 200,
+  filename = NULL, n.threads = 1, n.trees = 500, split.rule = 'logrank',
+  tod.round = 0.1, ...
 ) {
+  # This function should be foreach, but currently not in parallel. Running in
+  # parallel causes some kind of error which is very hard to debug with the 
+  # calibration score functions (it may be that the LOESS estimation runs out of
+  # memory, but it's not clear). This error is not reproducible when running the
+  # processes in serial. This isn't too much of an issue because the slowest
+  # models are random forests, and these already train in parallel.
+  # This should therefore be reproduced in foreach, but for now I'll just use a
+  # for loop so it can write out bootstrap results as you go.
+  # If implementing parallel, do a nested for/foreach loop combo which does
+  # 1:(bootstraps/n.threads) in the for and 1:n.threads in the foreach, so you
+  # can write out after n.threads processes and not lose everything if anything
+  # bad happens.
   
-  # Initialise parallel processing with the number of threads specified
-  cl <- initParallel(n.threads, backend = 'doParallel')
+  # Instantiate a blank data frame
+  bootstrap.params <- data.frame()
+  # And set the start bootstrap index to 1
+  boot.so.far <- 1
   
-  # Run a parallel foreach loop to get the bootstrapped parameter estimates.
-  # It returns a data frame which will then be returned from this function.
-  output <- foreach(
-    i = 1:bootstraps, .combine = cbind,
-    .packages = c('survival', 'randomForestSRC')
-  ) %dopar% {
+  # If a filename was specified...
+  if(!is.null(filename)) {
+    # ...and it exists already...
+    if(file.exists(filename)) {
+      # ...read it and see how far we got
+      bootstrap.params <- read.csv(filename)
+      boot.so.far <- nrow(bootstrap.params)
+      
+      # If we're already done, return the bootstraps
+      if(boot.so.far >= bootstraps) {
+        return(bootstrap.params)
+      }
+    }
+  }
+  # Otherwise, stick with a blank data frame and starting at 1
+  
+  # Run a for loop to get the bootstrapped parameter estimates.
+  for(i in boot.so.far:bootstraps) {
     
     # Bootstrap-sampled training set
     df.boot <- bootstrapSampleDf(df)
     
     surv.model.fit.i <-
       survivalFit(
-        predict.vars, df, model.type = model.type,
+        predict.vars, df.boot, model.type = model.type,
         n.trees = n.trees, split.rule = split.rule,
-        # 1 thread, because we're parallelising the bootstrapping
-        n.threads = 1,
+        # n.threads to take advantage of random forest parallelisation. Change
+        # to n.threads = 1 if foreach is parallelised, so everything is done
+        # in parallel.
+        n.threads = n.threads,
         ...
       )
     
     # Work out other quantities of interest
-    var.imp.vector <- bootstrapVarImp(surv.model.fit.i, df.boot)
-    c.index <- cIndex(surv.model.fit.i, df.test)
-    calibration.score <- calibrationScoreWrapper(surv.model.fit.i, df.test)
+    var.imp.vector <- bootstrapVarImp(surv.model.fit.i, df.boot, ...)
+    c.index <- cIndex(surv.model.fit.i, df.test, ...)
+    # This function causes the error when run in parallel.
+    calibration.score <- calibrationScoreWrapper(surv.model.fit.i, df.test, ...)
     
-    data.frame(
-      t(coef(surv.model.fit.i)),
-      t(var.imp.vector),
-      c.index,
-      calibration.score
-    )
+    # Some models (eg random forests!) don't return coefficients...so only try
+    # to add these to the data frame to return from this function if they exist.
+    if(!is.null(coef(surv.model.fit.i))) {
+      bootstrap.params <-
+        rbind(
+          bootstrap.params,
+          data.frame(
+            t(coef(surv.model.fit.i)),
+            t(var.imp.vector),
+            c.index,
+            calibration.score
+          )
+        )
+    } else {
+      bootstrap.params <-
+        rbind(
+          bootstrap.params,
+          data.frame(
+            t(coef(surv.model.fit.i)),
+            t(var.imp.vector),
+            c.index,
+            calibration.score
+          )
+        )
+    }
+    
+    # At the end of each iteration, save progress if a filename was provided
+    if(!is.null(filename)){
+      write.csv(bootstrap.params, filename)
+    }
   }
   
-  stopCluster(cl)
-  
-  output
+  # At the end of the function, return the parameters
+  bootstrap.params
 }
 
 survivalBootstrap <- function(
