@@ -764,7 +764,6 @@ survivalFitBoot <- function(
         rbind(
           bootstrap.params,
           data.frame(
-            t(coef(surv.model.fit.i)),
             t(var.imp.vector),
             c.index,
             calibration.score
