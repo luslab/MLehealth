@@ -1,3 +1,8 @@
+cox.disc.filename <- '../../output/all-cv-survreg-boot-try5-surv-model.rds'
+caliber.missing.coefficients.filename <-
+  '../../output/caliber-replicate-with-missing-survreg-6-linear-age-coeffs-3.csv'
+rf.filename <- '../../output/rfsrc-cv-nsplit-try3-var-effects.csv'
+
 source('../lib/shared.R')
 requirePlus('cowplot')
 
@@ -11,11 +16,9 @@ continuous.vars <-
   )
 
 # Load in the discretised Cox model for plotting
-surv.model.fit.boot <- readRDS('../../output/all-cv-survreg-boot-try5-surv-model.rds')
+surv.model.fit.boot <- readRDS(cox.disc.filename)
 
 # Pull coefficients from model with missing data
-caliber.missing.coefficients.filename <-
-  '../../output/caliber-replicate-with-missing-survreg-6-linear-age-coeffs-3.csv'
 caliber.missing.coeffs <- read.csv(caliber.missing.coefficients.filename)
 # Log them to get them on the same scale as discrete model
 caliber.missing.coeffs$our_value <- -log(caliber.missing.coeffs$our_value)
@@ -192,7 +195,7 @@ for(variable in unique(cph.coeffs$var)) {
         geom_step() +
         geom_step(aes(y = lower), colour = 'grey') +
         geom_step(aes(y = upper), colour = 'grey') +
-        ggtitle(variable)
+        labs(x = variable, y = 'Bx')
       
       # If there's a missing value risk, add it
       if(any(cph.coeffs$var == variable & cph.coeffs$level == 'missing')) {
@@ -290,16 +293,73 @@ for(variable in unique(cph.coeffs$var)) {
       # range plus a bit if there are missing values to squeeze in
       cox.discrete.plot <-
         cox.discrete.plot +
-        coord_cartesian(xlim = x.axis.limits)
+        coord_cartesian(xlim = x.axis.limits) +
+        theme(axis.title.y = element_blank()) +
+        theme(plot.margin = unit(c(0.2, 0.1, 0.2, 0.1), "cm"))
       
       cox.discrete.plots[[variable]] <- cox.discrete.plot
     }
   }
 }
 
+# Load the random forest variable effects file
+risk.by.variables <- read.csv(rf.filename)
+rf.vareff.plots <- list()
+
+for(variable in unique(risk.by.variables$var)) {
+  # Get the mean of the normalised risk for every value of the variable
+  risk.aggregated <-
+    aggregate(
+      as.formula(paste0('risk.normalised ~ val')),
+      subset(risk.by.variables, var == variable), median
+    )
+  
+  # work out the limits on the axes by taking the 1st and 99th percentiles
+  x.axis.limits <-
+    quantile(COHORT.use[, variable], c(0.01, 0.99), na.rm = TRUE)
+  y.axis.limits <-
+    quantile(subset(risk.by.variables, var == variable)$risk.normalised, c(0.05, 0.95), na.rm = TRUE)
+  
+  # If there's a missing value risk in the graph above, expand the axes so they
+  # match
+  if(any(cph.coeffs$var == variable & cph.coeffs$level == 'missing')) {
+    x.axis.limits[2] <- 
+      x.axis.limits[2] + diff(x.data.range) * missing.padding
+  }
+  
+  rf.vareff.plots[[variable]] <-
+    ggplot(
+      subset(risk.by.variables, var == variable), 
+      aes(x = val, y = log(risk.normalised))
+    ) +
+    geom_line(alpha=0.003, aes(group = id)) +
+    geom_line(data = risk.aggregated, colour = 'blue') +
+    coord_cartesian(xlim = x.axis.limits, ylim = log(y.axis.limits)) +
+    labs(x = variable) +
+    theme(
+      plot.margin = unit(c(0.2, 0.1, 0.2, 0.1), "cm"),
+      axis.title.y = element_blank()
+    )
+}
+
+
 plot_grid(
-  cox.discrete.plots[[1]], cox.discrete.plots[[2]], cox.discrete.plots[[3]],
-  cox.discrete.plots[[4]], cox.discrete.plots[[5]], cox.discrete.plots[[6]],
-  labels = c('A', rep('', 5)),
-  align = "v", ncol = 6
+  cox.discrete.plots[['age']],
+  cox.discrete.plots[['haemoglobin_6mo']],
+  cox.discrete.plots[['total_wbc_6mo']],
+  cox.discrete.plots[['crea_6mo']],
+  rf.vareff.plots[['age']],
+  rf.vareff.plots[['haemoglobin_6mo']],
+  rf.vareff.plots[['total_wbc_6mo']],
+  rf.vareff.plots[['crea_6mo']],
+  labels = c('A', rep('', 3), 'B', rep('', 3)),
+  align = "v", ncol = 4
+)
+
+ggsave(
+  '../../output/variable-effects.pdf',
+  width = 16,
+  height = 10,
+  units = 'cm',
+  useDingbats = FALSE
 )
