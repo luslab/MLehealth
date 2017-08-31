@@ -1,8 +1,7 @@
 models.include <-
   c(
     'age', 'cox', 'cox disc', 'cox imp', 'cox imp disc', 'rfsrc', 'rfsrc imp',
-    'rf-varselrf' # in future, remove rf-varselrf and replace with logrank,
-    # add big discrete cox model (can't decide on order for clearest labelling)
+    'rf-logrank', 'cox-logrank disc'
   )
 
 source('../lib/handy.R')
