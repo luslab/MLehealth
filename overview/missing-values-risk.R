@@ -94,7 +94,9 @@ disc.vs.cont.risks.plot <-
   geom_point() +
   geom_errorbar() +
   geom_errorbarh() +
-  geom_text()
+  geom_text() +
+  # Remove the legend, massively compresses the plot horizontally
+  theme(legend.position="none")
 
 
 
@@ -163,7 +165,7 @@ plot_grid(
   disc.vs.cont.risks.plot, risk.violins.plot,
   km.missingness,
   labels = c("A", "B", "C"),
-  align = "h", nrow = 1
+  align = "v", nrow = 1
 )
 ggsave(
   '../../output/missing-values-risk.pdf',
