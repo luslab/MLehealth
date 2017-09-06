@@ -349,6 +349,22 @@ factorNAfix <- function(x, NAval = 'NA', force = FALSE) {
   x
 }
 
+factorOrderedLevels <- function(x, ...) {
+  # Create a factor with levels in the order of the 
+  #
+  # Args:
+  #         x: A list or vector. Works if the list's elements are themselves
+  #            lists or vectors.
+  #
+  # Returns:
+  #      TRUE or FALSE, depending.
+  if(length(x) == length(unique(x))) {
+    return(factor(x, levels = x))
+  } else {
+    stop('Elements of x must all be unique.')
+  }
+}
+
 allSame <- function(x) {
   # Work out whether all elements of a list or vector are the same.
   #
