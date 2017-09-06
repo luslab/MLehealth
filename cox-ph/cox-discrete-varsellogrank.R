@@ -25,7 +25,7 @@ output.filename.base <- '../../output/cox-bigdata-varsellogrank-01'
 
 cv.n.folds <- 3
 vars.drop.frac <- 0.2 # Fraction of variables to drop at each iteration
-bootstraps <- 200
+bootstraps <- 100
 
 n.data <- NA # This is after any variables being excluded in prep
 
@@ -143,13 +143,22 @@ COHORT.bigdata$smokstatus <-
 COHORT.bigdata <- COHORT.bigdata[!COHORT.bigdata$exclude]
 COHORT.bigdata$exclude <- NULL
 
-COHORT.bigdata <-
-  prepSurvCol(data.frame(COHORT.bigdata), 'time_death', 'endpoint_death', 'Death')
+# Remove negative survival times
+COHORT.bigdata <- subset(COHORT.bigdata, time_death > 0)
+
+# Define test set
+test.set <- testSetIndices(COHORT.bigdata, random.seed = 78361)
 
 # If n.data was specified, trim the data table down to size
 if(!is.na(n.data)) {
   COHORT.bigdata <- sample.df(COHORT.bigdata, n.data)
 }
+
+# Create an appropraite survival column
+COHORT.bigdata <- 
+  prepSurvCol(
+    data.frame(COHORT.bigdata), 'time_death', 'endpoint_death', 'Death'
+  )
 
 # Start by predicting survival with all the variables provided
 surv.predict <- c(surv.predict.old, bigdata.columns)
@@ -239,7 +248,7 @@ process.settings$settings <-
         seq(
           # Quantiles are obviously between 0 and 1
           0, 1,
-          # Choose a random number of bins (and for n bins, you need n + 1 breaks)
+          # All have the same number of bins
           length.out = 10
         )
       ),
@@ -260,12 +269,6 @@ COHORT.prep <-
 # Kludge...remove surv_time.1 and rename surv_event.1
 COHORT.prep$surv_time.1 <- NULL
 names(COHORT.prep)[names(COHORT.prep) == 'surv_event.1'] <- 'surv_event'
-
-# Further kludge...remove negative survival times
-COHORT.prep <- subset(COHORT.prep, surv_time > 0)
-
-# Define test set
-test.set <- testSetIndices(COHORT.prep, random.seed = 78361)
 
 #' ## Run variable selection
 #' 
@@ -458,30 +461,52 @@ saveRDS(surv.model.fit.final, paste0(output.filename.base, '-finalmodel.rds'))
 #' but that would be prohibitive in terms of computational time.
 #' 
 #+ bootstrap_final
-surv.model.fit.boot <-
-  survivalBootstrap(
+
+time.start <- handyTimer()
+surv.model.params.boot <-
+  survivalFitBoot(
     surv.predict.partial,
     COHORT.prep[-test.set,], # Training set
     COHORT.prep[test.set,],  # Test set
     model.type = 'survreg',
     bootstraps = bootstraps,
-    n.threads = n.threads
+    n.threads = n.threads,
+    filename = paste0(output.filename.base, '-boot-all.csv')
   )
+time.boot.final <- handyTimer(time.start)
+
+#' `r bootstraps` bootstrap fits completed in `r time.boot.final` seconds!
 
 # Get coefficients and variable importances from bootstrap fits
-surv.model.fit.coeffs <- bootStats(surv.model.fit.boot, uncertainty = '95ci')
+surv.model.fit.coeffs <- bootStatsDf(surv.model.params.boot)
+
+# Save performance results
+varsToTable(
+  data.frame(
+    model = 'cox-logrank',
+    imputation = FALSE,
+    discretised = TRUE,
+    c.index = surv.model.fit.coeffs['c.index', 'val'],
+    c.index.lower = surv.model.fit.coeffs['c.index', 'lower'],
+    c.index.upper = surv.model.fit.coeffs['c.index', 'upper'],
+    calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
+    calibration.score.lower =
+      surv.model.fit.coeffs['calibration.score', 'lower'],
+    calibration.score.upper =
+      surv.model.fit.coeffs['calibration.score', 'upper']
+  ),
+  performance.file,
+  index.cols = c('model', 'imputation', 'discretised')
+)
 
 #' ## Performance
 #' 
 #' ### C-index
 #' 
-#' C-indices are **`r round(surv.model.fit.coeffs['c.index', 'val'], 3)`
+#' C-index is **`r round(surv.model.fit.coeffs['c.index', 'val'], 3)`
 #' (`r round(surv.model.fit.coeffs['c.index', 'lower'], 3)` - 
 #' `r round(surv.model.fit.coeffs['c.index', 'upper'], 3)`)**
-#' on the training set and
-#' **`r round(surv.model.fit.coeffs['c.index', 'val'], 3)`
-#' (`r round(surv.model.fit.coeffs['c.index', 'lower'], 3)` - 
-#' `r round(surv.model.fit.coeffs['c.index', 'upper'], 3)`)** on the test set.
+#' on the held-out test set.
 #' 
 #'
 #' ### Calibration
@@ -503,28 +528,3 @@ calibration.table <-
 calibration.score <- calibrationScore(calibration.table)
 
 calibrationPlot(calibration.table)
-
-#' The area between the calibration curve and the diagonal is 
-#' **`r round(calibration.score[['area']], 3)`** +/-
-#' **`r round(calibration.score[['se']], 3)`**.
-#'
-#+ save_results
-
-# Save performance results
-varsToTable(
-  data.frame(
-    model = 'cox-logrank',
-    imputation = FALSE,
-    discretised = TRUE,
-    c.index = surv.model.fit.coeffs['c.index', 'val'],
-    c.index.lower = surv.model.fit.coeffs['c.index', 'lower'],
-    c.index.upper = surv.model.fit.coeffs['c.index', 'upper'],
-    calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
-    calibration.score.lower =
-      surv.model.fit.coeffs['calibration.score', 'lower'],
-    calibration.score.upper =
-      surv.model.fit.coeffs['calibration.score', 'upper']
-  ),
-  performance.file,
-  index.cols = c('model', 'imputation', 'discretised')
-)
