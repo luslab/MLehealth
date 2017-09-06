@@ -228,28 +228,24 @@ surv.model.fit <-
     na.action = 'na.impute'
   )
 
-surv.model.fit.boot <-
-  survivalBootstrap(
+surv.model.params.boot <-
+  survivalFitBoot(
     surv.predict,
     COHORT.prep[-test.set,], # Training set
     COHORT.prep[test.set,],  # Test set
     model.type = 'rfsrc',
+    n.threads = n.threads,
+    bootstraps = bootstraps,
     n.trees = cv.performance[best.calibration.row1, 'n.trees'],
     split.rule = split.rule,
-    n.threads = n.threads,
     nsplit = cv.performance[best.calibration.row1, 'n.splits'],
     nimpute = cv.performance[best.calibration.row1, 'n.imputations'],
-    bootstraps = bootstraps
+    na.action = 'na.impute',
+    filename = paste0(output.filename.base, '-boot-all.csv')
   )
 
-# Save the fit object
-saveRDS(
-  surv.model.fit.boot,
-  paste0(output.filename.base, '-surv-model-bootstraps.rds')
-)
-
 # Get C-indices for training and test sets
-surv.model.fit.coeffs <- bootStats(surv.model.fit.boot, uncertainty = '95ci')
+surv.model.fit.coeffs <- bootStatsDf(surv.model.params.boot)
 
 # Save them to the all-models comparison table
 varsToTable(
@@ -257,9 +253,9 @@ varsToTable(
     model = 'rfsrc',
     imputation = FALSE,
     discretised = FALSE,
-    c.index = surv.model.fit.coeffs['c.test', 'val'],
-    c.index.lower = surv.model.fit.coeffs['c.test', 'lower'],
-    c.index.upper = surv.model.fit.coeffs['c.test', 'upper'],
+    c.index = surv.model.fit.coeffs['c.index', 'val'],
+    c.index.lower = surv.model.fit.coeffs['c.index', 'lower'],
+    c.index.upper = surv.model.fit.coeffs['c.index', 'upper'],
     calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
     calibration.score.lower =
       surv.model.fit.coeffs['calibration.score', 'lower'],
@@ -268,4 +264,9 @@ varsToTable(
   ),
   performance.file,
   index.cols = c('model', 'imputation', 'discretised')
+)
+
+write.csv(
+  surv.model.fit.coeffs,
+  paste0(output.filename.base, '-boot-summary.csv')
 )
