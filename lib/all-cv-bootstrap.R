@@ -4,7 +4,7 @@ bootstraps <- 200
 n.trees <- 500
 # The following two variables are only relevant if the model.type is 'ranger'
 split.rule <- 'logrank'
-n.threads <- 20
+n.threads <- 10
 
 # Cross-validation variables
 input.n.bins <- 10:20
@@ -163,8 +163,6 @@ if(!file.exists(calibration.filename)) {
   cv.performance <- read.csv(calibration.filename)
 }
 
-
-
 # Find the best calibration...
 # First, average performance across cross-validation folds
 cv.performance.average <-
@@ -226,15 +224,6 @@ COHORT.optimised <-
     extra.fun = caliberExtraPrep
   )
 
-# Variable importance argument varies depending on the package being used
-if(model.type == 'ranger'){
-  var.imp.arg <- 'permutation'
-} else if(model.type == 'rfsrc') {
-  var.imp.arg <- 'permute'
-} else {
-  var.imp.arg <- 'NULL'
-}
-
 #' ## Fit the final model
 #' 
 #' This may take some time, so we'll cache it if possible...
@@ -246,27 +235,60 @@ surv.model.fit <-
   survivalFit(
     surv.predict,
     COHORT.optimised[-test.set,], # Training set
-    COHORT.optimised[test.set,],  # Test set
     model.type = model.type,
     n.trees = n.trees,
     split.rule = split.rule,
     n.threads = n.threads
   )
 
-# Fit with bootstrapping to get better parameter estimates
-surv.model.fit.boot <-
-  survivalBootstrap(
-    surv.predict,
-    COHORT.optimised[-test.set,], # Training set
-    COHORT.optimised[test.set,],  # Test set
-    model.type = model.type,
-    n.trees = n.trees,
-    split.rule = split.rule,
-    n.threads = n.threads,
-    bootstraps = 3
-  )
+cl <- initParallel(n.threads, backend = 'doParallel')
+
+surv.model.params.boot <-
+  foreach(
+    i = 1:bootstraps,
+    .combine = rbind,
+    .packages = c('survival'),
+    .verbose = TRUE
+    ) %dopar% {
+    
+    # Bootstrap-sampled training set
+    COHORT.boot <-
+      sample.df(
+        COHORT.optimised[-test.set,],
+        nrow(COHORT.optimised[-test.set,]),
+        replace = TRUE
+      )
+    
+    surv.model.fit.i <-
+      survivalFit(
+        surv.predict,
+        COHORT.boot,
+        model.type = model.type,
+        n.trees = n.trees,
+        split.rule = split.rule,
+        # 1 thread, because we're parallelising the bootstrapping
+        n.threads = 1
+      )
+    
+    # Work out other quantities of interest
+    #var.imp.vector <- bootstrapVarImp(surv.model.fit.i, COHORT.boot)
+    c.index <- cIndex(surv.model.fit.i, COHORT.optimised[test.set, ])
+    calibration.score <-
+      calibrationScoreWrapper(surv.model.fit.i, COHORT.optimised[test.set, ])
+    
+    data.frame(
+      i,
+      t(coef(surv.model.fit.i)),
+      #t(var.imp.vector),
+      c.index,
+      calibration.score
+    )
+  }
 
 # Save the fit object
-saveRDS(surv.model.fit.boot, paste0(output.filename.base, '-surv-boot.rds'))
+write.csv(surv.model.params.boot, paste0(output.filename.base, '-surv-boot.csv'))
 
-surv.model.fit.coeffs <-  bootStats(surv.model.fit.boot, uncertainty = '95ci')
+# Tidy up by removing the cluster
+stopCluster(cl)
+
+surv.model.fit.coeffs <-  bootStatsDf(surv.model.params.boot)
