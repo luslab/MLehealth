@@ -42,7 +42,7 @@ endpoint <- 'death'
 
 old.coefficients.filename <- 'rapsomaniki-cox-values-from-paper.csv'
 
-output.filename.base <- '../../output/caliber-replicate-with-missing-survreg-5'
+output.filename.base <- '../../output/caliber-replicate-with-missing-survreg-6-linear-age'
 
 bootstraps <- 200
 n.threads <- 20
@@ -104,19 +104,11 @@ test.set <- testSetIndices(COHORT.use, random.seed = 78361)
 
 #' ### Age
 #' 
-#' Risk of death is a nonlinear function of age at the start of the study, so
-#' it is modelled with a cubic spline. Let's have a look at what that function
-#' looks like...
+#' There seem to be some issues with the age spline function, so let's just fit
+#' to a linear one as a check...
 
-df <- data.frame(
-  x = 50:100,
-  y = sapply(50:100, ageSpline)
-)
+ageSpline <- identity
 
-ggplot(df, aes(x,y)) +
-  geom_line()
-
-#' The spline function looks approximately exponential, which makes sense.
 #' 
 #' ### Other variables
 #' 
@@ -169,7 +161,7 @@ surv.formula <-
     ## Age in women, per year
     ## Women vs. men
     # ie include interaction between age and gender!
-    age + gender +
+    age * gender +
     ## Most deprived quintile, yes vs. no
     most_deprived +
     most_deprived_missing +
@@ -274,9 +266,9 @@ varsToTable(
     model = 'cox',
     imputation = FALSE,
     discretised = FALSE,
-    c.index = fit.exp.boot.ests['c.test', 'val'],
-    c.index.lower = fit.exp.boot.ests['c.test', 'lower'],
-    c.index.upper = fit.exp.boot.ests['c.test', 'upper'],
+    c.index = fit.exp.boot.ests['c.index', 'val'],
+    c.index.lower = fit.exp.boot.ests['c.index', 'lower'],
+    c.index.upper = fit.exp.boot.ests['c.index', 'upper'],
     calibration.score = fit.exp.boot.ests['calibration.score', 'val'],
     calibration.score.lower = fit.exp.boot.ests['calibration.score', 'lower'],
     calibration.score.upper = fit.exp.boot.ests['calibration.score', 'upper']
@@ -292,13 +284,10 @@ varsToTable(
 #' Having fitted the Cox model, how did we do? The c-indices were calculated as
 #' part of the bootstrapping, so we just need to take a look at those...
 #' 
-#' C-indices are **`r round(fit.exp.boot.ests['c.train', 'val'], 3)`
-#' (`r round(fit.exp.boot.ests['c.train', 'lower'], 3)` - 
-#' `r round(fit.exp.boot.ests['c.train', 'upper'], 3)`)** on the training set and
-#' **`r round(fit.exp.boot.ests['c.test', 'val'], 3)`
-#' (`r round(fit.exp.boot.ests['c.test', 'lower'], 3)` - 
-#' `r round(fit.exp.boot.ests['c.test', 'upper'], 3)`)** on the test set.
-#' Not too bad!
+#' C-indices are **`r round(fit.exp.boot.ests['c.index', 'val'], 3)`
+#' (`r round(fit.exp.boot.ests['c.index', 'lower'], 3)` - 
+#' `r round(fit.exp.boot.ests['c.index', 'upper'], 3)`)** on the held-out test
+#' set.
 #' 
 #' ### Calibration
 #' 
@@ -316,14 +305,8 @@ varsToTable(
 calibration.table <-
   calibrationTable(fit.exp, COHORT.scaled.demissed[test.set, ])
 
-calibration.score <- calibrationScore(calibration.table)
-
 calibrationPlot(calibration.table)
-
-#' The area between the calibration curve and the diagonal is 
-#' **`r round(calibration.score[['area']], 3)`** +/-
-#' **`r round(calibration.score[['se']], 3)`**.
-#' 
+ 
 #' 
 #' ## Coefficients
 #' 
