@@ -29,7 +29,7 @@ split.rule <- 'logrank'
 n.imputations <- 3
 cv.n.folds <- 3
 vars.drop.frac <- 0.2 # Fraction of variables to drop at each iteration
-bootstraps <- 200
+bootstraps <- 20
 
 n.data <- NA # This is after any variables being excluded in prep
 
@@ -419,23 +419,48 @@ saveRDS(surv.model.fit.final, paste0(output.filename.base, '-finalmodel.rds'))
 #' 
 #+ bootstrap_final
 
-surv.model.fit.boot <-
-  survivalBootstrap(
+time.start <- handyTimer()
+surv.model.params.boot <-
+  survivalFitBoot(
     surv.predict.partial,
     COHORT.bigdata[-test.set,], # Training set
     COHORT.bigdata[test.set,],  # Test set
     model.type = 'rfsrc',
-    n.trees = n.trees.final,
-    split.rule = split.rule,
     n.threads = n.threads,
-    nimpute = 3,
-    nsplit = nsplit,
-    na.action = 'na.impute',
-    bootstraps = bootstraps
+    bootstraps = bootstraps,
+    filename = paste0(output.filename.base, '-boot-all.csv'),
+    na.action = 'na.impute'
   )
+time.fit.boot <- handyTimer(time.start)
+
+#' `r bootstraps` bootstraps completed in `r round(time.fit.boot)` seconds!
 
 # Get coefficients and variable importances from bootstrap fits
-surv.model.fit.coeffs <- bootStats(surv.model.fit.boot, uncertainty = '95ci')
+surv.model.fit.coeffs <- bootStatsDf(surv.model.params.boot)
+
+# Save performance results
+varsToTable(
+  data.frame(
+    model = 'rf-varsellr',
+    imputation = FALSE,
+    discretised = FALSE,
+    c.index = surv.model.fit.coeffs['c.index', 'val'],
+    c.index.lower = surv.model.fit.coeffs['c.index', 'lower'],
+    c.index.upper = surv.model.fit.coeffs['c.index', 'upper'],
+    calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
+    calibration.score.lower =
+      surv.model.fit.coeffs['calibration.score', 'lower'],
+    calibration.score.upper =
+      surv.model.fit.coeffs['calibration.score', 'upper']
+  ),
+  performance.file,
+  index.cols = c('model', 'imputation', 'discretised')
+)
+
+write.csv(
+  surv.model.fit.coeffs,
+  paste0(output.filename.base, '-boot-summary.csv')
+)
 
 #' ## Performance
 #' 
@@ -476,26 +501,4 @@ calibration.score <- calibrationScore(calibration.table)
 calibrationPlot(calibration.table)
 
 #' The area between the calibration curve and the diagonal is 
-#' **`r round(calibration.score[['area']], 3)`** +/-
-#' **`r round(calibration.score[['se']], 3)`**.
-#'
-#+ save_results
-
-# Save performance results
-varsToTable(
-  data.frame(
-    model = 'rf-varselmiss',
-    imputation = FALSE,
-    discretised = FALSE,
-    c.index = surv.model.fit.coeffs['c.train', 'val'],
-    c.index.lower = surv.model.fit.coeffs['c.train', 'lower'],
-    c.index.upper = surv.model.fit.coeffs['c.train', 'upper'],
-    calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
-    calibration.score.lower =
-      surv.model.fit.coeffs['calibration.score', 'lower'],
-    calibration.score.upper =
-      surv.model.fit.coeffs['calibration.score', 'upper']
-  ),
-  performance.file,
-  index.cols = c('model', 'imputation', 'discretised')
-)
+#' **`r round(calibration.score, 3)`**

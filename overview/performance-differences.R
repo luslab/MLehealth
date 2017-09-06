@@ -7,7 +7,9 @@ bootstrap.files <-
     cox.miss = 'caliber-replicate-with-missing-survreg-6-linear-age-surv-boot.rds',
     cox.disc = 'all-cv-survreg-boot-try5-surv-model.rds',
     cox.imp = 'caliber-replicate-imputed-survreg-4-surv-boot-imp.rds',
-    rf = 'rfsrc-cv-nsplit-try3-surv-model-bootstraps.rds'
+    rf = 'rfsrc-cv-nsplit-try3-boot-all.csv',
+    rfbig = 'rf-bigdata-varsellogrank-02-boot-all.csv',
+    coxbig = 'cox-bigdata-varsellogrank-01-boot-all.csv'
   )
 
 # Helper functions
@@ -32,16 +34,20 @@ n <- length(bootstrap.files)
 bootstraps <- list()
 
 for(i in 1:n) {
-  bootstraps[[i]] <- readRDS(file.path(bootstrap.base, bootstrap.files[i]))
-  
-  if(class(bootstraps[[i]]) == 'list') {
-    # If it's a list, then it's from an imputed dataset with separate bootstraps
-    # Turn each of these into a data frame and then combine them together.
-    # (data.frame is needed because rbindlist returns a data.table)
-    bootstraps[[i]] <-
-      data.frame(rbindlist(lapply(bootstraps[[i]], bootstrap2Df)))
-  } else {
-    bootstraps[[i]] <- bootstrap2Df(bootstraps[[i]] )
+  if(fileExt(bootstrap.files[i]) == 'rds'){
+    bootstraps[[i]] <- readRDS(file.path(bootstrap.base, bootstrap.files[i]))
+    
+    if(class(bootstraps[[i]]) == 'list') {
+      # If it's a list, then it's from an imputed dataset with separate bootstraps
+      # Turn each of these into a data frame and then combine them together.
+      # (data.frame is needed because rbindlist returns a data.table)
+      bootstraps[[i]] <-
+        data.frame(rbindlist(lapply(bootstraps[[i]], bootstrap2Df)))
+    } else {
+      bootstraps[[i]] <- bootstrap2Df(bootstraps[[i]] )
+    }
+  } else{
+    bootstraps[[i]] <- read.csv(file.path(bootstrap.base, bootstrap.files[i]))
   }
 }
 
@@ -104,6 +110,6 @@ for(i in 1:length(x1)) {
 # Remove nonsense row names
 rownames(bootstrap.differences) <- NULL
 
-print(bootstrap.differences)
+print(cbind(bootstrap.differences[, c('model.1', 'model.2', 'var')], round(bootstrap.differences[, 4:6], 3)))
 
 write.csv(bootstrap.differences, '../../output/bootstrap-differences.csv')
