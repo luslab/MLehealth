@@ -43,13 +43,10 @@ source('../lib/all-cv-bootstrap.R', chdir = TRUE)
 #' 
 #' ### C-index
 #' 
-#' C-indices are **`r round(surv.model.fit.coeffs['c.train', 'val'], 3)`
-#' (`r round(surv.model.fit.coeffs['c.train', 'lower'], 3)` - 
-#' `r round(surv.model.fit.coeffs['c.train', 'upper'], 3)`)**
-#' on the training set and
-#' **`r round(surv.model.fit.coeffs['c.test', 'val'], 3)`
-#' (`r round(surv.model.fit.coeffs['c.test', 'lower'], 3)` - 
-#' `r round(surv.model.fit.coeffs['c.test', 'upper'], 3)`)** on the test set.
+#' C-index is **`r round(surv.model.fit.coeffs['c.index', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['c.index', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['c.index', 'upper'], 3)`)** on the held-out
+#' test set.
 #' 
 #'
 #' ### Calibration
@@ -72,10 +69,6 @@ calibration.score <- calibrationScore(calibration.table)
 
 calibrationPlot(calibration.table)
 
-#' The area between the calibration curve and the diagonal is 
-#' **`r round(calibration.score[['area']], 3)`** +/-
-#' **`r round(calibration.score[['se']], 3)`**.
-#' 
 #' 
 #' ## Model fit
 #'
@@ -94,9 +87,9 @@ varsToTable(
     model = 'cox',
     imputation = FALSE,
     discretised = TRUE,
-    c.index = surv.model.fit.coeffs['c.test', 'val'],
-    c.index.lower = surv.model.fit.coeffs['c.test', 'lower'],
-    c.index.upper = surv.model.fit.coeffs['c.test', 'upper'],
+    c.index = surv.model.fit.coeffs['c.index', 'val'],
+    c.index.lower = surv.model.fit.coeffs['c.index', 'lower'],
+    c.index.upper = surv.model.fit.coeffs['c.index', 'upper'],
     calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
     calibration.score.lower =
       surv.model.fit.coeffs['calibration.score', 'lower'],
@@ -109,8 +102,7 @@ varsToTable(
 
 # Unpackage the uncertainties again, this time transformed because survreg
 # returns negative values
-surv.boot.ests <- 
-  bootStats(surv.model.fit.boot, uncertainty = '95ci', transform = `-`)
+surv.boot.ests <- bootStatsDf(surv.model.params.boot, transform = `-`)
 
 #' First, plot the factors and logicals as a scatter plot to compare with the
 #' continuous Cox model...
@@ -152,12 +144,18 @@ ggplot(
 
 # Unpack variable and level names
 cph.coeffs <- cphCoeffs(
-  bootStats(surv.model.fit.boot, uncertainty = '95ci', transform = identity),
+  bootStats(surv.model.fit.boot, uncertainty = '95ci', transform = `-`),
   COHORT.optimised, surv.predict, model.type = 'boot.survreg'
 )
 
 # We'll need the CALIBER scaling functions for plotting
-source('caliber-scale.R')
+source('../cox-ph/caliber-scale.R')
+
+# set up list to store the plots
+cox.discrete.plots <- list()
+# Add dummy columns for x-position of missing values
+cph.coeffs$missing.x.pos.cont <- NA
+cph.coeffs$missing.x.pos.disc <- NA
 
 for(variable in unique(cph.coeffs$var)) {
   # If it's a continuous variable, get the real centres of the bins
@@ -190,18 +188,22 @@ for(variable in unique(cph.coeffs$var)) {
         rbind(
           cph.coeffs,
           cph.coeffs[cph.coeffs$var == variable & 
-                      cph.coeffs$level != 'missing', ][
-                        length(variable.quantiles) - 1, ]
-          )
+                       cph.coeffs$level != 'missing', ][
+                         length(variable.quantiles) - 1, ]
+        )
       # Change it so that bin.min is bin.max from the old one
       cph.coeffs$bin.min[nrow(cph.coeffs)] <-
         cph.coeffs$bin.max[cph.coeffs$var == variable & 
-                            cph.coeffs$level != 'missing'][
-                              length(variable.quantiles) - 1]
+                             cph.coeffs$level != 'missing'][
+                               length(variable.quantiles) - 1]
       
-      # work out the limits on the x-axis by taking the 1st and 99th percentiles
-      x.axis.limits <- quantile(COHORT.use[, variable], c(0.01, 0.99), na.rm = TRUE)
+      # Work out data range by taking the 1st and 99th percentiles
       # Use the max to provide a max value for the final bin
+      # Also use for x-axis limits, unless there are missing values to
+      # accommodate on the right-hand edge.
+      x.data.range <-
+        quantile(COHORT.use[, variable], c(0.01, 0.99), na.rm = TRUE)
+      x.axis.limits <- x.data.range
       
       
       # Finally, we need to scale this such that the baseline value is equal
@@ -217,15 +219,19 @@ for(variable in unique(cph.coeffs$var)) {
           COHORT.use[
             inRange(COHORT.use[, variable], baseline.bin, na.false = TRUE),
             variable
-          ]
+            ]
         )
       # Then, scale it with the caliber scaling
-      baseline.bin.val <- caliberScaleUnits(baseline.bin.avg, variable)
-
+      baseline.bin.val <-
+        caliberScaleUnits(baseline.bin.avg, variable) * 
+        caliber.missing.coeffs$our_value[
+          caliber.missing.coeffs$quantity == variable
+          ]
+      
       # And now, add all the discretised values to that value to make them
       # comparable...
       cph.coeffs[cph.coeffs$var == variable, c('val', 'lower', 'upper')] <-
-        cph.coeffs[cph.coeffs$var == variable, c('val', 'lower', 'upper')] +
+        cph.coeffs[cph.coeffs$var == variable, c('val', 'lower', 'upper')] -
         baseline.bin.val
       
       # Now, plot this variable as a stepped line plot using those quantile
@@ -238,53 +244,54 @@ for(variable in unique(cph.coeffs$var)) {
         geom_step() +
         geom_step(aes(y = lower), colour = 'grey') +
         geom_step(aes(y = upper), colour = 'grey') +
-        #geom_text(aes(label = bin.min), angle = 90, hjust = 0) +
-        # Missing values central estimate
-        coord_cartesian(xlim = c(x.axis.limits)) +
         ggtitle(variable)
       
       # If there's a missing value risk, add it
       if(any(cph.coeffs$var == variable & cph.coeffs$level == 'missing')) {
+        # Expand the x-axis to squeeze the missing values in
+        x.axis.limits[2] <- 
+          x.axis.limits[2] + diff(x.data.range) * missing.padding
+        # Put this missing value a third of the way into the missing area
+        cph.coeffs$missing.x.pos.disc[
+          cph.coeffs$var == variable &
+            cph.coeffs$level == 'missing'] <-
+          x.axis.limits[2] + diff(x.data.range) * missing.padding / 3
+        
+        # Add the point to the graph (we'll set axis limits later)
         cox.discrete.plot <-
           cox.discrete.plot +
           geom_pointrange(
             data = cph.coeffs[cph.coeffs$var == variable & 
                                 cph.coeffs$level == 'missing', ],
             aes(
-              x = x.axis.limits[2], # Place at the right-hand edge of plot
-              y = val,
-              ymin = lower,
+              x = missing.x.pos.disc,
+              y = val, ymin = lower,
               ymax = upper
             ),
             colour = 'red'
           )
       }
       
-      # Now, let's add the line from the continuous Cox model
+      # Now, let's add the line from the continuous Cox model. We only need two
+      # points because the lines are straight!
       continuous.cox <-
         data.frame(
-          # Use 1000 values for a smooth line
-          var.x.values =
-            seq(
-              quantile(COHORT.use[, variable], 0.01, na.rm = TRUE),
-              quantile(COHORT.use[, variable], 0.99, na.rm = TRUE),
-              length.out = 1000
-            )
+          var.x.values = x.data.range
         )
       # Scale the x-values
       continuous.cox$var.x.scaled <-
         caliberScaleUnits(continuous.cox$var.x.values, variable)
       # Use the risks to calculate risk per x for central estimate and errors
       continuous.cox$y <-
-        caliber.missing.coeffs$our_value[
+        -caliber.missing.coeffs$our_value[
           caliber.missing.coeffs$quantity == variable
           ] * continuous.cox$var.x.scaled
       continuous.cox$upper <-
-        caliber.missing.coeffs$our_upper[
+        -caliber.missing.coeffs$our_upper[
           caliber.missing.coeffs$quantity == variable
           ] * continuous.cox$var.x.scaled
       continuous.cox$lower <-
-        caliber.missing.coeffs$our_lower[
+        -caliber.missing.coeffs$our_lower[
           caliber.missing.coeffs$quantity == variable
           ] * continuous.cox$var.x.scaled
       
@@ -309,24 +316,40 @@ for(variable in unique(cph.coeffs$var)) {
       # If there is one, add missing value risk from the continuous model
       if(any(caliber.missing.coeffs$quantity == paste0(variable, '_missing') &
              caliber.missing.coeffs$unit == 'missing')) {
+        # Expand the x-axis to squeeze the missing values in
+        x.axis.limits[2] <- 
+          x.axis.limits[2] + diff(x.data.range) * missing.padding
+        # Put this missing value 2/3rds of the way into the missing area
+        cph.coeffs$missing.x.pos.cont[
+          cph.coeffs$var == variable &
+            cph.coeffs$level == 'missing'] <-
+          x.axis.limits[2] + diff(x.data.range) * missing.padding / 3
+        x.axis.limits[2] + 2 * diff(x.data.range) * missing.padding / 3
+        
         cox.discrete.plot <-
           cox.discrete.plot +
           geom_pointrange(
-            data = caliber.missing.coeffs[
-              caliber.missing.coeffs$quantity == paste0(variable, '_missing') &
-              caliber.missing.coeffs$unit == 'missing',
-            ],
+            data = cph.coeffs[
+              cph.coeffs$var == variable &
+                cph.coeffs$level == 'missing',
+              ],
             aes(
-              x = x.axis.limits[2] - diff(x.axis.limits)/100, # Just before RHS
-              y = our_value,
-              ymin = our_lower,
-              ymax = our_upper
+              x = missing.x.pos.cont,
+              y = val, ymin = lower, ymax = upper
             ),
             colour = 'blue'
           )
       }
       
-      print(cox.discrete.plot)
+      # Finally, set the x-axis limits; will just be the data range, or data
+      # range plus a bit if there are missing values to squeeze in
+      cox.discrete.plot <-
+        cox.discrete.plot +
+        coord_cartesian(xlim = x.axis.limits)
+      
+      cox.discrete.plots[[variable]] <- cox.discrete.plot
     }
   }
 }
+
+print(cox.discrete.plots)
