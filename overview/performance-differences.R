@@ -8,6 +8,7 @@ bootstrap.files <-
     cox.disc = 'all-cv-survreg-boot-try5-surv-model.rds',
     cox.imp = 'caliber-replicate-imputed-survreg-4-surv-boot-imp.rds',
     rf = 'rfsrc-cv-nsplit-try3-boot-all.csv',
+    rf.imp = 'rf-imputed-try1-boot.rds',
     rfbig = 'rf-bigdata-varsellogrank-02-boot-all.csv',
     coxbig = 'cox-bigdata-varsellogrank-01-boot-all.csv'
   )
