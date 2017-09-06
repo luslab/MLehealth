@@ -12,7 +12,7 @@ opts_chunk$set(cache.lazy = FALSE)
 #' In difference to previous attempts at cross-validation, this uses between 10
 #' and 20 bins, not between 2 and 20, in an attempt to avoid throwing away data.
 
-output.filename.base <- '../../output/rfsrc-cv-nsplit-try2'
+output.filename.base <- '../../output/rfsrc-cv-nsplit-try3'
 data.filename <- '../../data/cohort-sanitised.csv'
 
 # If surv.vars is defined as a character vector here, the model only uses those
@@ -97,3 +97,45 @@ print(
 )
 
 print(cor(var.imp[, c('var.imp', 'our_range')], method = 'spearman'))
+
+#' ## Variable effects
+#' 
+#+ variable_effects
+
+risk.by.variables <- data.frame()
+
+for(variable in continuous.vars) {
+  # Create a partial effect table for this variable
+  risk.by.variable <-
+    partialEffectTable(
+      surv.model.fit, COHORT.prep[-test.set,], variable, na.action = 'na.impute'
+    )
+  # Slight kludge...rename the column which above is given the variable name to
+  # just val, to allow rbinding
+  names(risk.by.variable)[2] <- 'val'
+  # Append a column with the variable's name so we can distinguish this in
+  # a long data frame
+  risk.by.variable$var <- variable
+  # Append it to our ongoing big data frame
+  risk.by.variables <- rbind(risk.by.variables, risk.by.variable)
+  # Save the risks as we go
+  write.csv(risk.by.variables, paste0(output.filename.base, '-var-effects.csv'))
+  
+  # Get the mean of the normalised risk for every value of the variable
+  risk.aggregated <-
+    aggregate(
+      as.formula(paste0('risk.normalised ~ ', variable)),
+      risk.by.variable, mean
+    )
+  
+  # work out the limits on the x-axis by taking the 1st and 99th percentiles
+  x.axis.limits <-
+    quantile(COHORT.full[, variable], c(0.01, 0.99), na.rm = TRUE)
+  
+  print(
+    ggplot(risk.by.variable, aes_string(x = variable, y = 'risk.normalised')) +
+      geom_line(alpha=0.01, aes(group = id)) +
+      geom_line(data = risk.aggregated, colour = 'blue') +
+      coord_cartesian(xlim = c(x.axis.limits))
+  )
+}
