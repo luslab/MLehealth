@@ -828,9 +828,11 @@ survivalBootstrap <- function(
   } else if(model.type == 'ranger') {
     stop('model.type ranger not yet implemented')
   } else if(model.type == 'rfsrc') {
-    # rfsrc, if you installed it correctly, controls threading by changing an
-    # environment variable
-    options(rf.cores = n.threads)
+    # Make rfsrc single-threaded, so we can parallelise with bootstrap
+    # (This helps with things like c-index calculation which may not use all
+    # cores, though in edge cases of very few bootstraps doing it this way will
+    # slow things down)
+    options(rf.cores = 1)
     
     return(
       boot(
@@ -838,8 +840,8 @@ survivalBootstrap <- function(
         data = df,
         statistic = bootstrapFitRfsrc,
         R = bootstraps,
-        parallel = 'no',
-        ncpus = 1, # disable parallelism because rfsrc can be run in parallel
+        parallel = 'multicore',
+        ncpus = n.threads,
         n.trees = n.trees,
         test.data = df.test,
         # Boot requires named variables, so can't use ... here. This slight
@@ -874,25 +876,18 @@ bootstrapFit <- function(formula, data, indices, fit.fun) {
   #   passes by boot to construct estimates of variation in parameters.
   
   d <- data[indices,]
-  fit <- fit.fun(formula, data = d, ...)
+  fit <- fit.fun(formula, data = d)
   return(coef(fit))
 }
 
 bootstrapVarImp <- function(fit, data, ...) {
   # Variable importance by C-index
-  var.imp.c.index <- generalVarImp(fit, data, ...)
-  # Variable importance by calibration score
-  var.imp.calibration <-
-    generalVarImp(fit, data, statistic = calibrationScoreWrapper, ...)
+  var.imp.c.index <- generalVarImp(fit, data, statistic = cIndex, ...)
   
   # Concatenate both into a vector with names to distinguish the two
-  var.imp.vector <- c(var.imp.c.index$var.imp, var.imp.calibration$var.imp)
-  names(var.imp.vector) <-
-    c(
-      paste0('vimp.c.index.', var.imp.c.index$var),
-      paste0('vimp.calibration.', var.imp.calibration$var)
-    )
-  
+  var.imp.vector <- var.imp.c.index$var.imp
+  names(var.imp.vector) <- paste0('vimp.c.index.', var.imp.c.index$var)
+
   # Return that vector
   var.imp.vector
 }
@@ -900,13 +895,14 @@ bootstrapVarImp <- function(fit, data, ...) {
 bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
   # Wrapper function to pass a survreg fit with c-index calculations to boot.
   
-  print(paste('iteration', sample(1:100, 1)))
-  
   d <- data[indices,]
   fit <- survreg(formula, data = d, dist = 'exponential')
   
   # Get variable importances by both C-index and calibration
   var.imp.vector <- bootstrapVarImp(fit, d)
+  
+  c.index <- cIndex(fit, test.data)
+  calibration.score <- calibrationScoreWrapper(fit, test.data)
   
   # Return fit coefficients, variable importances, c-index on training data,
   # c-index on test data
@@ -914,10 +910,8 @@ bootstrapFitSurvreg <- function(formula, data, indices, test.data) {
     c(
       coef(fit),
       var.imp.vector,
-      c.index = cIndex(fit, test.data),
-      calibration.score =
-        # Only the area, let's not return the standard error for now...
-        calibrationScore(calibrationTable(fit, test.data))$area
+      c.index = c.index,
+      calibration.score = calibration.score
     )
   )
 }
@@ -947,8 +941,8 @@ bootstrapFitRfsrc <-
   return(
     c(
       var.imp.vector,
-      c.test = cIndex(fit, test.data, nsplit = nsplit, na.action = 'na.impute'),
-      calibration.score = calibration.score$area
+      c.index = cIndex(fit, test.data, na.action = 'na.impute'),
+      calibration.score = calibration.score
     )
   )
 }
@@ -1074,7 +1068,11 @@ negExp <- function(x) {
   exp(-x)
 }
 
-getRisk <- function(model.fit, df, risk.time = 5, ...) {
+getRisk <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
+  # If needed, create the rounded survival time
+  if(!(modelType(model.fit) %in% c('survreg'))) {
+    df$surv_time_round <- round_any(df$surv_time, tod.round)
+  }
   
   # Make predictions for the data df based on the model model.fit
   predictions <- predict(model.fit, df, ...)
@@ -1083,7 +1081,6 @@ getRisk <- function(model.fit, df, risk.time = 5, ...) {
   # way to get a proxy for risk...
   
   # If we're dealing with a ranger model, then we need to get a proxy for risk
-  # TODO: Replace model.type ifs (which now do nothing) with class-based ones
   if(modelType(model.fit) == 'ranger') {
     risk.bin <- which.min(abs(predictions$unique.death.times - risk.time))
     # Get the chance of having died (ie 1 - survival) for all patients at that time (ie in that bin)
@@ -1238,8 +1235,12 @@ partialEffectTable <-
     # value of the variable we're interested in exploring
     df.sample[, variable] <-
       sort(
+        # We sample in case n.values is less than the total number of unique
+        # values for a given variable
         samplePlus(df[, variable], n.values, na.rm = TRUE, only.unique = TRUE)
       )
+    # (This sorted samplePlus will be a factor of n.patients too short, but
+    # that's OK because it'll just be repeated)
     
     # Use the model to make predictions
     df.sample$risk <- getRisk(model.fit, df.sample, risk.time, ...)
@@ -1304,7 +1305,7 @@ calibrationPlot <- function(df) {
 }
 
 calibrationScore <- function(
-  calibration.table, risk.breaks = seq(0, 1, 0.001), curve = FALSE,
+  calibration.table, risk.breaks = seq(0, 1, 0.01), curve = FALSE,
   extremes = TRUE
   ) {
   #
@@ -1319,7 +1320,7 @@ calibrationScore <- function(
   
   
   # Fit a LOESS model to the data
-  loess.curve <- loess(event ~ risk, calibration.table)
+  loess.curve <- loess(event ~ risk, data = calibration.table)
   
   # Get the bin widths, which we'll need in a bit when integrating
   risk.binwidths <- diff(risk.breaks)
@@ -1327,18 +1328,16 @@ calibrationScore <- function(
   risk.mids <- risk.breaks[1:(length(risk.breaks) - 1)] + risk.binwidths / 2
   
   predictions <-
-    predict(loess.curve, data.frame(risk = risk.mids), se = TRUE)
+    predict(loess.curve, data.frame(risk = risk.mids), se = FALSE)
   
-  pred.curve <- predictions$fit
-  
-  if(anyNA(pred.curve)) {
+  if(anyNA(predictions)) {
     if(extremes) {
       # Get the bins where we don't have a valid prediction
-      missing.risks <- risk.mids[is.na(pred.curve)]
+      missing.risks <- risk.mids[is.na(predictions)]
       # And predict 0 is < 0.5, 1 if greater, for a worst-case step-function
       missing.risks <- as.numeric(missing.risks > 0.5)
       # Finally, substitute them in
-      pred.curve[is.na(pred.curve)] <- missing.risks
+      predictions[is.na(predictions)] <- missing.risks
     } else {
       # If there are missing values but extremes = FALSE, ie don't extend, then
       # issue a warning to let the user know.
@@ -1365,15 +1364,7 @@ calibrationScore <- function(
   
   curve.area <-
     sum(
-      abs(pred.curve - risk.mids) * risk.binwidths,
-      na.rm = TRUE
-    )
-  
-  # Not sure what if anything to do about NAs in the standard error, so silently
-  # ignore them for now...
-  curve.area.se <-
-    sum(
-      abs(predictions$se.fit) * risk.binwidths,
+      abs(predictions - risk.mids) * risk.binwidths,
       na.rm = TRUE
     )
   
@@ -1382,16 +1373,11 @@ calibrationScore <- function(
     # ...return area between lines and standard error, plus the curve
     list(
       area = curve.area,
-      se = curve.area.se,
-      curve = predictions$fit, # Not pred.curve, because we want to see NAs
-      curve.se = predictions$se.fit
+      curve = predictions
     )
   } else {
     # ...otherwise, just return the summary statistic
-    list(
-      area = curve.area,
-      se = curve.area.se
-    )
+    return(curve.area)
   }
 }
 
@@ -1404,7 +1390,7 @@ calibrationScoreWrapper <- function(
   1 - 
     calibrationScore(
       calibrationTable(model.fit, df, risk.time, tod.round, ...)
-    )$area
+    )
 }
 
 testSetIndices <- function(df, test.fraction = 1/3, random.seed = NA) {
