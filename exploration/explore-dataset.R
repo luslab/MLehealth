@@ -13,7 +13,7 @@ opts_chunk$set(cache.lazy = FALSE)
 
 data.filename <- '../../data/cohort-sanitised.csv'
 
-source('../random-forest/shared.R')
+source('../lib/shared.R')
 requirePlus('rms')
 
 COHORT.full <- data.frame(fread(data.filename))
