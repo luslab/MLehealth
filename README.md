@@ -52,10 +52,6 @@ Discrete Cox model for the data-driven modelling, which cross-validates over num
 
 This model uses the expert-selected dataset with discretised versions of continuous variables to allow missing values to be incorporated, and cross-validates to determine the discretisation scheme.
 
-#### cox-discretised.R
-
-This model uses the expert-selected dataset, with imputation to fill in missing values and discretised versions of continuous variables, and cross-validates to determine the discretisation scheme.
-
 #### rapsomaniki-cox-values-from-paper.csv
 
 Values for Cox coefficients transcribed from Rapsomaniki et al., used to check for consistency between that model and these.
@@ -124,6 +120,36 @@ Plots of variable effects for continuous and discrete Cox models, and random for
 
 Plots permutation variable importances calculated for the final data-driven models, post variable selection. The basis of Fig. 4 in the paper.
 
+### random-forest
+
+#### rf-age.R
+
+Building a random forest with fewer variables (including just age) to experiment with predictive power.
+
+#### rf-classification.R
+
+Classification forest for death at 5 years, in an attempt to improve calibration score of the resulting model.
+
+#### rf-imputed.R
+
+Random forest on the imputed dataset as an empirical test of whether imputation provides an advantage.
+
+#### rfsrc-cv.R
+
+Random forest on the expert-selected dataset, which uses ``rfsrc-cv-nsplit-bootstrap.R`` from ``lib`` (see above) to fit its forest.
+
+#### rf-varsellogrank.R
+
+Random forest for the data-driven modelling, which cross-validates over number of variables used, drawing from a list ranked by univariate logrank tests.
+
+#### rf-varselmiss.R
+
+Random forest for the data-driven modelling, which cross-validates over number of variables used, drawing from a list ranked by decreasing missingness.
+
+#### rf-varselrf-eqv.R
+
+Random forest for the data-driven modelling, which cross-validates over number of variables used, drawing from a list ranked by the variable importance of a large random forest fitted to all the data. Modelled after [varSelRF](https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-7-3).
+
 ### scripts
 
 This folder is for a few miscellaneous short scripts.
@@ -131,3 +157,11 @@ This folder is for a few miscellaneous short scripts.
 #### export-bigdata.R
 
 This script was used to export anonymised data for the data-driven modelling with ~600 variables. Its file paths are not correct because they are localised for the secure environment where the raw data are stored.
+
+#### spinme.R
+
+This wrapper makes it easy to spin a script into an HTML report from the command line (see the example command at the top of this readme).
+
+## Notes
+
+This repository has been tidied up so that only scripts relevant to the final publication are preserved. Various initial and exploratory analysis scripts have been removed for clarity. If for any reason these are of interest, they are present in commit 08934808c497a0f094c71a731cb9cb2564e4cc0f, the final commit before the tidy-up began.
