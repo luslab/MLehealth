@@ -335,12 +335,13 @@ plotConfusionMatrix <- function(truth, prediction, title = NA) {
   confusion.matrix
 }
 
-convertFactorsToBinaryColumns<- function(data_frame){
-  covariates=colnames(data_frame)
-  return(model.matrix( 
-    formula(paste0('~',paste0(covariates,collapse='+'))), 
-    data = data_frame
-  )[,-1]
+convertFactorsToBinaryColumns <- function(df) {
+  covariates <- colnames(df)
+  return(
+    model.matrix( 
+      formula(paste0('~', paste0(covariates, collapse = '+'))), 
+      data = df
+    )[,-1] # -1 to remove 'Intercept' column at start which is all 1s
   )
 }
 
