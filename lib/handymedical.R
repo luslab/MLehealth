@@ -1071,12 +1071,15 @@ negExp <- function(x) {
 
 getRisk <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
   # If needed, create the rounded survival time
-  if(!(modelType(model.fit) %in% c('survreg'))) {
+  if(modelType(model.fit) %in% c('ranger', 'rfsrc')) {
     df$surv_time_round <- round_any(df$surv_time, tod.round)
   }
   
-  # Make predictions for the data df based on the model model.fit
-  predictions <- predict(model.fit, df, ...)
+  # Make predictions for the data df based on the model model.fit if it doesn't
+  # require special treatment (in which case it will be done manually below)
+  if(modelType(model.fit) != 'cv.glmnet') {
+    predictions <- predict(model.fit, df, ...)
+  }
   
   # Then, for any model other than cph, they will need to be transformed in some
   # way to get a proxy for risk...
@@ -1094,6 +1097,16 @@ getRisk <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
     # survreg type models give larger numbers for longer survival...this is a
     # hack to make this return C-indices which make sense!
     predictions <- max(predictions) - predictions
+  } else if(modelType(model.fit) == 'cv.glmnet') {
+    predictions <-
+      predict(
+        model.fit,
+        # Use model which is least complex but still within 1 SE of lowest MSE
+        s = model.fit$lambda.1se,
+        # cv.glmnet takes a matrix, not a data frame, and it must be passed with
+        # time correct dimensions, ie time/event columns removed
+        newx = df
+      )
   }
   
   predictions
