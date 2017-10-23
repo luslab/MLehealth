@@ -459,7 +459,7 @@ print(
 #' 
 #' Nonzero values are red, zero values are blue.
 
-ggplot(cv.fit.coefficients.ordered, aes(x = name, y = val, colour = val == 0)) +
+ggplot(cv.fit.coefficients.ordered, aes(x = factorlevel, y = val, colour = val == 0)) +
   geom_point() +
   theme(
     axis.title.x=element_blank(), axis.text.x=element_blank(),
