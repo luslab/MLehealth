@@ -296,26 +296,26 @@ cv.fit <-
 #' 
 #+ c_index
 
-test.predictions <-
-  getRisk(
-    cv.fit,
-    COHORT.bin[test.set, !(colnames(COHORT.bin) %in% c('surv_time', 'surv_event'))]
-  )
-
-c.index <- cIndex(cv.fit,
-                  COHORT.bin[test.set, !(colnames(COHORT.bin) %in% c('surv_time', 'surv_event'))])
-
-c.index <-
+glmnetCIndex <- function(model.fit, dm) {
+  test.predictions <-
+    getRisk(
+      model.fit,
+      dm[, !(colnames(dm) %in% c('surv_time', 'surv_event'))]
+    )
+  
   as.numeric(
     survConcordance(
-      as.formula(paste0('Surv(time, status) ~ risk')),
+      as.formula(paste0('Surv(surv_time, surv_event) ~ surv_event')),
       data.frame(
-        time = COHORT.prep$time[test.set],
-        status = COHORT.prep$status[test.set],
-        risk = as.vector(test.predictions)
+        surv_time = dm[, 'surv_time'],
+        surv_event = dm[, 'surv_event'],
+        risk = test.predictions
       )
     )$concordance
   )
+}
+
+c.index <- glmnetCIndex(cv.fit, COHORT.bin[test.set, ])
 
 #' C-index is `r c.index`.
 #'
@@ -329,67 +329,67 @@ c.index <-
 #' 
 #+ calibration_plot
 
-# Select the coefficients of the model which are greater than zero
-coef.non0 <- as.vector(abs(coef(cv.fit, s = "lambda.1se")) > 0)
-# Values of coefficients
-selected.coef <- coef(cv.fit, s = "lambda.1se")[coef.non0]
-# Names of coefficients
-selected.vars <-
-  colnames(COHORT.bin)[
-    !(colnames(COHORT.bin) %in% c('surv_time', 'surv_event'))
-  ][coef.non0]
+glmnetCalibrationTable <- function(model.fit, dm, test.set, risk.time = 5) {
+  # Select the coefficients of the model which are greater than zero
+  coef.non0 <- as.vector(abs(coef(model.fit, s = "lambda.1se")) > 0)
+  # Values of coefficients
+  selected.coef <- coef(model.fit, s = "lambda.1se")[coef.non0]
+  # Names of coefficients
+  selected.vars <-
+    colnames(dm)[
+      !(colnames(dm) %in% c('surv_time', 'surv_event'))
+      ][coef.non0]
+  
+  # Make a dummy data frame from the model matrix for a dummy Cox model because
+  # coxph needs a data frame not a matrix
+  dummy.df <- data.frame(COHORT.bin[, c('surv_time', 'surv_event', selected.vars)])
+  
+  # Round the times in the dummy data frame to save memory and time
+  dummy.df$surv_time <- round(dummy.df$surv_time, 1)
+  
+  dummy.cph <-
+    coxph(
+      as.formula(
+        paste0(
+          'Surv(surv_time, surv_event) ~ ',
+          # use make.names because turning the binarised matrix into a data frame
+          # converts its colnames
+          paste0(make.names(selected.vars), collapse = '+')
+        )),
+      data = dummy.df[-test.set, ],
+      init = selected.coef, iter=0
+    )
+  
+  # Perform a fit to get survival curves for the test set
+  sfit <- survfit(dummy.cph, newdata = dummy.df[test.set, ])
+  
+  risktime.col <- which.min(abs(sfit$time - risk.time))
+  
+  # Returns % survived, we want % dead
+  risks <- 1 - as.vector(sfit$surv[risktime.col, ])
+  
+  calibration.table <-
+    data.frame(
+      surv_event = dummy.df$surv_event[test.set],
+      surv_time = dummy.df$surv_time[test.set],
+      risk = risks
+    )
+  
+  # Was there an event? Start with NA, because default is unknown (ie censored)
+  calibration.table$event <- NA
+  # Event before risk.time
+  calibration.table$event[
+    calibration.table$surv_event & calibration.table$surv_time <= risk.time
+    ] <- TRUE
+  # Event after, whether censorship or not, means no event by risk.time
+  calibration.table$event[calibration.table$surv_time > risk.time] <- FALSE
+  # Otherwise, censored before risk.time, leave as NA
+  
+  # Drop unnecessary columns and return
+  calibration.table[, c('risk', 'event')]
+}
 
-# Make a dummy data frame from the model matrix for a dummy Cox model because
-# coxph needs a data frame not a matrix
-COHORT.dummy <- data.frame(COHORT.bin[, c('surv_time', 'surv_event', selected.vars)])
-
-# Round the times in the dummy data frame to save memory and time
-COHORT.dummy$surv_time <- round(COHORT.dummy$surv_time, 1)
-
-dummy.cph <-
-  coxph(
-    as.formula(
-      paste0(
-        'Surv(surv_time, surv_event) ~ ',
-        # use make.names because turning the binarised matrix into a data frame
-        # converts its colnames
-        paste0(make.names(selected.vars), collapse = '+')
-      )),
-    data = COHORT.dummy[-test.set, ],
-    init = selected.coef, iter=0
-  )
-
-# Perform a fit to get survival curves for the test set
-sfit <- survfit(dummy.cph, newdata = COHORT.dummy[test.set, ])
-
-risk.time <- 5
-
-risktime.col <- which.min(abs(sfit$time - risk.time))
-
-# Returns % survived, we want % dead
-risks <- 1 - as.vector(sfit$surv[risktime.col, ])
-
-calibration.table <- data.frame(
-  surv_event = COHORT.dummy$surv_event[test.set],
-  surv_time = COHORT.dummy$surv_time[test.set],
-  risk = risks
-)
-
-# How to do it in future when cph is supported in handymedical.R
-# calibration.table <- calibrationTable(dummy.cph, COHORT.dummy[test.set, ])
-
-# Was there an event? Start with NA, because default is unknown (ie censored)
-calibration.table$event <- NA
-# Event before risk.time
-calibration.table$event[
-  calibration.table$surv_event & calibration.table$surv_time <= risk.time
-  ] <- TRUE
-# Event after, whether censorship or not, means no event by risk.time
-calibration.table$event[calibration.table$surv_time > risk.time] <- FALSE
-# Otherwise, censored before risk.time, leave as NA
-
-# Drop unnecessary columns
-calibration.table <- calibration.table[, c('risk', 'event')]
+calibration.table <- glmnetCalibrationTable(cv.fit, COHORT.bin, test.set)
 
 calibration.score <- calibrationScore(calibration.table)
 

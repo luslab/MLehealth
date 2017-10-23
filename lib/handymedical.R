@@ -1105,8 +1105,11 @@ getRisk <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
         s = model.fit$lambda.1se,
         # cv.glmnet takes a matrix, not a data frame, and it must be passed with
         # time correct dimensions, ie time/event columns removed
-        newx = df
+        newx = df,
+        ...
       )
+    # cv.glmnet predictions are returned as a matrix, so convert to vector
+    predictions <- as.vector(predictions)
   }
   
   predictions
