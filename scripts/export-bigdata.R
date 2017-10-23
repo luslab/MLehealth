@@ -51,6 +51,13 @@ clinical.files <-
 n.top.clinical.values <- 100
 n.top.clinical.history <- 100
 
+therapy.files <-
+  file.path(
+    data.path,
+    paste0('therapy.part.', 0:7)
+  )
+n.top.therapy <- 100
+
 
 ################################################################################
 ### END USER VARIABLES #########################################################
@@ -263,12 +270,9 @@ tests.data <- readMedicalData(
 )
 
 # First, discard those where operator is not =, because > and < etc will
-# introduce complexity
-tests.data <-
-  tests.data[
-    tests.data$data1 == 3,
-    c("anonpatid", "eventdate", "enttype", "data2", "data3")
-    ]
+# introduce complexity, and drop data1 since it's now useless
+tests.data <- tests.data[data1 == 3]
+tests.data$data1 <- NULL
 
 # Now, let's subtract the indexdate from every test so we can choose the ones
 # closest to the desired dates...
@@ -281,16 +285,22 @@ tests.data$relativedate <- tests.data$indexdate - tests.data$eventdate
 
 # Only keep positive values; negative ones are in the future which is cheating!
 tests.data <- tests.data[relativedate >= 0]
+# Only 89001 have any test results from before the indexdate!
 
 # Discard any test results from times greater than the longest time ago to check
-tests.data <-
-  tests.data[
-    tests.data$relativedate < test.timepoints[2],
-    ]
+tests.data <- tests.data[relativedate < test.timepoints[2]]
+# And this drops to 57972 in the preceding six months
 
-# aggregate by test type (enttype, which covers a range of read codes which can
+# Per patient and per test, keep the smallest relativedate value only
+tests.data <-
+  tests.data[, .SD[which.min(relativedate)], by = list(anonpatid, enttype)]
+
+# aggregate by test type (enttype, which covers a range of Read codes which can
 # mean the same test) and unit of measure (so we can choose the tests with the
 # units with the best coverage)
+# We do this after all the preprocessing (ie only looking at the most recent
+# value per patient before but not too far before the indexdate) because
+# otherwise a lot of the top tests change. Presumably 
 tests.by.test <-
   tests.data[, length(unique(anonpatid)), by = c('enttype', 'data3')]
 names(tests.by.test) <- c('enttype', 'data3', 'n.pat')
@@ -299,34 +309,31 @@ top.tests <- tests.by.test$enttype[order(tests.by.test$n.pat, decreasing = TRUE)
 top.units <- tests.by.test$data3[order(tests.by.test$n.pat, decreasing = TRUE)[1:n.top.tests]]
 
 # Now, discard all the rows corresponding to non-top tests
-tests.top <-
+tests.data <-
   tests.data[
-    tests.data$enttype %in% top.tests & tests.data$data3 %in% top.units,
+    # Needs to be exact match of enttype and variable combination
+    paste0(enttype, '!!!', data3) %in% paste0(top.tests, '!!!', top.units)
   ]
 
-# Per patient and per test, keep the smallest relativedate value only
-tests.top.most.recent <-
-  tests.top[, .SD[which.min(relativedate)], by = c('anonpatid', 'enttype')]
-
 # Make a column per test
-tests.top.most.recent.wide <-
+tests.wide <-
   dcast(
-    data = tests.top.most.recent,
-    formula = anonpatid ~ enttype,
+    data = tests.data,
+    formula = anonpatid ~ enttype + data3,
     value.var = "data2"
   )
 
 # Add a prefix to the names to keep track
 # (There may not be n.top.tests columns here as some get lost during the paring
 # down processes above...)
-names(tests.top.most.recent.wide)[-1] <-
-  paste0('tests.enttype.', names(tests.top.most.recent.wide)[-1])
+names(tests.wide)[-1] <-
+  paste0('tests.enttype.data3.', names(tests.wide)[-1])
 
 # Now, merge with the original cohort
 COHORT <-
   merge(
     COHORT,
-    tests.top.most.recent.wide,
+    tests.wide,
     by = c('anonpatid'),
     all = TRUE
   )
@@ -468,7 +475,7 @@ clinical.values <-
 
 # Per patient and per test, keep the smallest relativedate value only
 clinical.values.most.recent <-
-  clinical.values[, .SD[which.min(relativedate)], by = c('anonpatid', 'enttype')]
+  clinical.values[, .SD[which.min(relativedate)], by = c('anonpatid', 'enttype', 'variable')]
 
 # Make a column per test
 clinical.values.most.recent.wide <-
@@ -494,6 +501,70 @@ COHORT <-
   )
 
 
+### Therapy ####################################################################
+
+# read in the therapy data
+therapy.data <- readMedicalData(
+  therapy.files,
+  c("anonpatid", "eventdate", "bnfcode"),
+  c("integer", "date", "integer")
+)
+# The other option than bnfcode is prodcode, which refers to specific products
+# rather than BNF categories. There are far more of these so, assuming the BNF
+# classification is somewhat rational, I'm going to go with that first to
+# reduce data sparsity.
+
+# Now, merge with the indexdate...we only want data before then, because looking
+# after it is cheating, and using all data rather than just stuff before may
+# distort our choice of variables as some variables may be very common after
+# entering the study, but less so before... (14 differ...)
+therapy.data <-
+  merge(
+    therapy.data, COHORT[, c('anonpatid', 'indexdate')],
+    by = 'anonpatid', all.x = TRUE
+  )
+
+therapy.data$relativedate <- therapy.data$indexdate - therapy.data$eventdate
+
+# Now, remove all the negative relative dates, because they're in the past
+therapy.data <- therapy.data[relativedate >= 0]
+# And remove all data which is too far into the past
+therapy.data <- therapy.data[relativedate < 366]
+
+# get aggregate statistics for each BNF code
+therapy.by.bnf <- therapy.data[, length(unique(anonpatid)), by = bnfcode]
+names(therapy.by.bnf) <- c('bnfcode', 'n.pat')
+# Take the top n by number of patients with that code
+top.bnf <-
+  therapy.by.bnf$bnfcode[order(therapy.by.bnf$n.pat, decreasing = TRUE)[1:n.top.therapy]]
+
+# Discard all the rows corresponding to non-top BNF codes
+therapy.data <- therapy.data[therapy.data$bnfcode %in% top.bnf, ]
+
+# Aggregate by number of prescriptions per patient
+therapy.data <- therapy.data[, .N, by = list(anonpatid, bnfcode)]
+
+# Per BNF code, add a new column to the cohort and put in numbers
+therapy.wide <-
+  dcast(
+    data = therapy.data,
+    formula = anonpatid ~ bnfcode,
+    value.var = "N"
+  )
+
+# Add a prefix to the names to keep track
+names(therapy.wide)[2:(n.top.therapy + 1)] <-
+  paste0('bnf.', names(therapy.wide)[2:(n.top.therapy + 1)])
+
+# And merge into the overall cohort
+COHORT <-
+  merge(
+    COHORT,
+    therapy.wide,
+    by = c('anonpatid'),
+    all = TRUE
+  )
+
 ### Anonymisation steps ########################################################
 
 # delete the columns with obvious privacy issues
@@ -513,7 +584,7 @@ for(date.col in c(date.cols)) {
 # make age an integer
 COHORT$age <- round(COHORT$age)
 
-#make pracregion and ethnicity into categories
+# make pracregion and ethnicity into categories
 lookup_pracregion <-
   sample(unique(COHORT$pracregion),length(unique(COHORT$pracregion)))
 lookup_ethnicity <-
@@ -526,7 +597,7 @@ COHORT$pracregion <-
 COHORT$hes_ethnicity <-
   as.integer(factor(COHORT$hes_ethnicity, levels = lookup_ethnicity))
 
-#make IMD score into deciles-ish
+# make IMD score into deciles-ish
 COHORT$imd_score <- round(COHORT$imd_score/10)
 
 write.csv(COHORT, 'cohort-datadriven.csv')
