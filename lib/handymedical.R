@@ -1301,7 +1301,7 @@ calibrationPlot <- function(df) {
       data = censored.df, colour = 'grey', alpha = 0.1,
       position = position_jitter(w = 00, h = 0.125)
     ) +
-    geom_smooth(method = 'loess') +
+    geom_smooth() +
     coord_cartesian(xlim = c(0,1), ylim = c(0,1))
 }
 
