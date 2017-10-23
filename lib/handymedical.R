@@ -1084,7 +1084,8 @@ getRisk <- function(model.fit, df, risk.time = 5, tod.round = 0.1, ...) {
   # If we're dealing with a ranger model, then we need to get a proxy for risk
   if(modelType(model.fit) == 'ranger') {
     risk.bin <- which.min(abs(predictions$unique.death.times - risk.time))
-    # Get the chance of having died (ie 1 - survival) for all patients at that time (ie in that bin)
+    # Get the chance of having died (ie 1 - survival) for all patients at that
+    # time (ie in that bin)
     predictions <- 1 - predictions$survival[, risk.bin]
   } else if(modelType(model.fit) == 'rfsrc') {
     # If we're dealing with a randomForestSRC model, extract the 'predicted' var
@@ -1106,7 +1107,8 @@ getRiskAtTime <- function(model.fit, df, risk.time = 5, ...) {
     predictions <- predict(model.fit, df, ...)
     
     risk.bin <- which.min(abs(predictions$unique.death.times - risk.time))
-    # Get the chance of having died (ie 1 - survival) for all patients at that time (ie in that bin)
+    # Get the chance of having died (ie 1 - survival) for all patients at that
+    # time (ie in that bin)
     predictions <- 1 - predictions$survival[, risk.bin]
     
     
@@ -1117,7 +1119,8 @@ getRiskAtTime <- function(model.fit, df, risk.time = 5, ...) {
     # If we're dealing with a randomForestSRC model, do the same as ranger but
     # with different variable names
     risk.bin <- which.min(abs(predictions$time.interest - risk.time))
-    # Get the chance of having died (ie 1 - survival) for all patients at that time (ie in that bin)
+    # Get the chance of having died (ie 1 - survival) for all patients at that
+    # time (ie in that bin)
     predictions <- 1 - predictions$survival[, risk.bin]
     
     
