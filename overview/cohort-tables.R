@@ -6,6 +6,8 @@ source('../lib/shared.R')
 # prepData simpler
 COHORT.full <- fread(data.filename)
 
+print(nrow(COHORT.full))
+
 # Remove the patients we shouldn't include
 COHORT.full <-
   COHORT.full[
@@ -16,10 +18,14 @@ COHORT.full <-
     ,
     ]
 
+# Total study population
+print(nrow(COHORT.full))
+
 # Age, 5, 50, 95, %missing
 print(quantile(COHORT.full$age, c(0.5, 0.05, 0.95)))
 
 # Gender
+print(table(COHORT.full$gender))
 print(table(COHORT.full$gender))/nrow(COHORT.full)*100
 
 # Deprivation, 5, 50, 95, %missing
@@ -41,4 +47,5 @@ print(
 print(quantile(COHORT.full$endpoint_death_date, c(0.5, 0.05, 0.95)))/365.25
 
 # Death vs censored, %
+print(table(COHORT.full$endpoint_death))
 print(table(COHORT.full$endpoint_death)) /nrow(COHORT.full)*100
