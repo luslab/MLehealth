@@ -21,15 +21,14 @@ opts_chunk$set(cache.lazy = FALSE)
 #' 
 #+ user_variables
 
-output.filename.base <- '../../output/cox-bigdata-varsellogrank-01'
+output.filename.base <- '../../output/cox-discrete-elasticnet-01'
 
-cv.n.folds <- 3
-vars.drop.frac <- 0.2 # Fraction of variables to drop at each iteration
-bootstraps <- 100
+bootstraps <- 3
+bootstrap.filename <- paste0(output.filename.base, '-boot-all.csv')
 
 n.data <- NA # This is after any variables being excluded in prep
 
-n.threads <- 20
+n.threads <- 8
 
 #' ## Data set-up
 #' 
@@ -232,8 +231,6 @@ COHORT.bin <- convertFactorsToBinaryColumns(COHORT.prep)
 # model.matrix renames logicals to varTRUE, so fix that for status
 colnames(COHORT.bin)[colnames(COHORT.bin) == 'surv_eventTRUE'] <- 'surv_event'
 
-test.set <- testSetIndices(COHORT.bin)
-
 # Coxnet code, should you ever decide to go that route
 # test <-
 #   Coxnet(
@@ -250,9 +247,11 @@ test.set <- testSetIndices(COHORT.bin)
 #' is best after tenfold cross-validation...
 
 require(glmnet)
-initParallel(8)
+initParallel(n.threads)
 
-alphas <- seq(0, 1, length.out = 2)
+time.start <- handyTimer()
+
+alphas <- seq(0, 1, length.out = 1)
 mse <- c()
 
 for(alpha in alphas) {
@@ -268,6 +267,10 @@ for(alpha in alphas) {
   best.lambda.i <- which(cv.fit$lambda == cv.fit$lambda.min) # should this be lambda.1se?
   mse <- c(mse, cv.fit$cvm[best.lambda.i])
 }
+
+time.cv <- handyTimer(time.start)
+
+#' `r length(alphas)` alpha values tested in `r time.cv` seconds!
 
 alpha.best <- alphas[which.min(mse)]
 
@@ -305,7 +308,7 @@ glmnetCIndex <- function(model.fit, dm) {
   
   as.numeric(
     survConcordance(
-      as.formula(paste0('Surv(surv_time, surv_event) ~ surv_event')),
+      as.formula(paste0('Surv(surv_time, surv_event) ~ risk')),
       data.frame(
         surv_time = dm[, 'surv_time'],
         surv_event = dm[, 'surv_event'],
@@ -357,7 +360,8 @@ glmnetCalibrationTable <- function(model.fit, dm, test.set, risk.time = 5) {
           paste0(make.names(selected.vars), collapse = '+')
         )),
       data = dummy.df[-test.set, ],
-      init = selected.coef, iter=0
+      init = selected.coef,
+      iter = 0
     )
   
   # Perform a fit to get survival curves for the test set
@@ -415,12 +419,12 @@ cv.fit.coefficients.ordered <-
       factorOrderedLevels(
         colnames(COHORT.bin)[
           order(abs(coef(cv.fit, s = "lambda.1se")), decreasing = TRUE)
-        ]
+          ]
       ),
     val =
       coef(cv.fit, s = "lambda.1se")[
         order(abs(coef(cv.fit, s = "lambda.1se")), decreasing = TRUE)
-      ]
+        ]
   )
 
 # Get the variable names by removing TRUE, (x,y] or missing from the end
