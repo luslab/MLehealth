@@ -473,3 +473,151 @@ ggplot(cv.fit.coefficients.ordered, aes(x = factorlevel, y = val, colour = val =
 #' `r length(unique(cv.fit.coefficients.ordered$var[cv.fit.coefficients.ordered$val != 0]))`
 #' unique variables represented out of
 #' `r length(unique(cv.fit.coefficients.ordered$var))` total variables.
+#' 
+#' ## Bootstrapping
+#' 
+#' Having got those results for a single run on all the data, now bootstrap to
+#' find sample-induced variability in performance statistics. Again, because
+#' glmnet requires a matrix rather than a data frame this would require a large
+#' amount of code in ``handymedical.R``, so do this manually.
+#'
+#+ bootstrap_performance
+
+time.start <- handyTimer()
+
+# Instantiate a blank data frame
+bootstrap.params <- data.frame()
+
+for(i in 1:bootstraps) {
+  # Take a bootstrap sample of the training set. We do this with COHORT.prep for
+  # the variable importance calculations later.
+  COHORT.prep.boot <- bootstrapSampleDf(COHORT.prep[-test.set, ])
+  
+  # Create a binary matrix for fitting
+  COHORT.boot <- convertFactorsToBinaryColumns(COHORT.prep.boot)
+  # model.matrix renames logicals to varTRUE, so fix that for status
+  colnames(COHORT.boot)[colnames(COHORT.boot) == 'surv_eventTRUE'] <- 'surv_event'
+  
+  # Fit, but with alpha fixed on the optimal value
+  cv.fit.boot <-
+    cv.glmnet(
+      COHORT.boot[, !(colnames(COHORT.boot) %in% c('surv_time', 'surv_event'))],
+      Surv(COHORT.boot[, 'surv_time'], COHORT.boot[, 'surv_event']),
+      family = "cox",
+      maxit = 1000,
+      alpha = alpha.best
+    )
+
+  c.index.boot <- glmnetCIndex(cv.fit.boot, COHORT.boot)
+  calibration.boot <-
+    calibrationScore(glmnetCalibrationTable(cv.fit.boot, COHORT.boot, test.set))
+  
+  var.imp.vector <- c()
+  # Loop over variables to get variable importance
+  for(
+    var in
+    colnames(
+      COHORT.prep.boot[, !(colnames(COHORT.prep.boot) %in% c('surv_time', 'surv_event'))]
+    )
+  ) {
+    # Create a dummy data frame and scramble the column var
+    COHORT.vimp <- COHORT.prep.boot
+    COHORT.vimp[, var] <- sample(COHORT.vimp[, var], replace = TRUE)
+    # Make it into a model matrix for fitting
+    COHORT.vimp <- convertFactorsToBinaryColumns(COHORT.vimp)
+    # model.matrix renames logicals to varTRUE, so fix that for status
+    colnames(COHORT.vimp)[colnames(COHORT.vimp) == 'surv_eventTRUE'] <- 'surv_event'
+    # Calculate the new C-index
+    c.index.vimp <- glmnetCIndex(cv.fit.boot, COHORT.vimp)
+    
+    # Append the difference between the C-index with scrambling and the original
+    var.imp.vector <-
+      c(
+        var.imp.vector,
+        c.index.boot - c.index.vimp
+      )
+  }
+  
+  names(var.imp.vector) <-
+    paste0(
+      'vimp.c.index.',
+      colnames(
+        COHORT.prep.boot[
+          ,
+          !(colnames(COHORT.prep.boot) %in% c('surv_time', 'surv_event'))
+          ]
+      )
+    )
+  
+  bootstrap.params <-
+    rbind(
+      bootstrap.params,
+      data.frame(
+        t(var.imp.vector),
+        c.index.boot,
+        calibration.boot
+      )
+    )
+  
+  # Save the bootstrap parameters for later use
+  write.csv(bootstrap.params, bootstrap.filename)
+}
+
+time.boot.final <- handyTimer(time.start)
+
+#' `r bootstraps` bootstrap fits completed in `r time.boot.final` seconds!
+
+# Get coefficients and variable importances from bootstrap fits
+surv.model.fit.coeffs <- bootStatsDf(bootstrap.params)
+
+# Save performance results
+varsToTable(
+  data.frame(
+    model = 'cox-elnet',
+    imputation = FALSE,
+    discretised = TRUE,
+    c.index = surv.model.fit.coeffs['c.index', 'val'],
+    c.index.lower = surv.model.fit.coeffs['c.index', 'lower'],
+    c.index.upper = surv.model.fit.coeffs['c.index', 'upper'],
+    calibration.score = surv.model.fit.coeffs['calibration.score', 'val'],
+    calibration.score.lower =
+      surv.model.fit.coeffs['calibration.score', 'lower'],
+    calibration.score.upper =
+      surv.model.fit.coeffs['calibration.score', 'upper']
+  ),
+  performance.file,
+  index.cols = c('model', 'imputation', 'discretised')
+)
+
+#' The bootstrapped C-index is
+#' **`r round(surv.model.fit.coeffs['c.index', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['c.index', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['c.index', 'upper'], 3)`)**
+#' on the held-out test set.
+#' 
+#' The bootstrapped calibration score is
+#' **`r round(surv.model.fit.coeffs['calibration.score', 'val'], 3)`
+#' (`r round(surv.model.fit.coeffs['calibration.score', 'lower'], 3)` - 
+#' `r round(surv.model.fit.coeffs['calibration.score', 'upper'], 3)`)**.
+#' 
+#' ### Variable importances
+#' 
+#' Top 20 most important variables from the most recent bootstrap. (This is
+#' obviously indicative but just to plot a quick graph and get an idea.)
+#' 
+#+ bootstrap_var_imp
+
+boot.var.imp.ordered <-
+  data.frame(
+    var = textAfter(names(var.imp.vector), 'vimp.c.index.'),
+    val = var.imp.vector,
+    stringsAsFactors = FALSE
+  )
+
+boot.var.imp.ordered$desc <- lookUpDescriptions(boot.var.imp.ordered$var)
+
+ggplot(
+    boot.var.imp.ordered[order(boot.var.imp.ordered$val[1:20], decreasing = TRUE), ],
+    aes(x = var, y = val)
+  ) +
+  geom_bar(stat = 'identity')
