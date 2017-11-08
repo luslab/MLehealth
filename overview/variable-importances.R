@@ -50,7 +50,8 @@ cox.bigdata.vars$var <-
 cox.bigdata.vars <-
   cox.bigdata.vars[order(cox.bigdata.vars$val, decreasing = TRUE)[1:20], ]
 
-cox.bigdata.vars <- cox.bigdata.vars[order(cox.bigdata.vars$val, decreasing = FALSE), ]
+cox.bigdata.vars <-
+  cox.bigdata.vars[order(cox.bigdata.vars$val, decreasing = FALSE), ]
 
 cox.bigdata.vars$description <- lookUpDescriptions(cox.bigdata.vars$var)
 
@@ -90,7 +91,9 @@ cox.bigdata.plot <-
     ) +
     geom_bar(stat = 'identity') + 
     geom_errorbar(width = 0.25) +
-    coord_flip()
+    coord_flip() +
+  theme(axis.title.y = element_blank(), axis.text.y = element_text(size = 10)) +
+  ylim(0, 0.17)
 
 # Random forest big data
 rf.bigdata <- read.csv('../../output/rf-bigdata-varsellogrank-02-boot-all.csv')
@@ -103,7 +106,8 @@ rf.bigdata.vars$var <-
 rf.bigdata.vars <-
   rf.bigdata.vars[order(rf.bigdata.vars$val, decreasing = TRUE)[1:20], ]
 
-rf.bigdata.vars <- rf.bigdata.vars[order(rf.bigdata.vars$val, decreasing = FALSE), ]
+rf.bigdata.vars <-
+  rf.bigdata.vars[order(rf.bigdata.vars$val, decreasing = FALSE), ]
 
 cat('c(', paste0("'", as.character(rf.bigdata.vars$description), "',"), ')', sep = '\n')
 
@@ -143,21 +147,140 @@ rf.bigdata.plot <-
   ) +
     geom_bar(stat = 'identity') + 
     geom_errorbar(width = 0.25) +
-    coord_flip()
+    coord_flip() +
+  theme(axis.title.y = element_blank(), axis.text.y = element_text(size = 10)) +
+  ylim(0, 0.17)
 
+
+
+# Elastic net Cox model
+elastic.bigdata <- read.csv('../../output/cox-discrete-elasticnet-01-boot-all.csv')
+elastic.bigdata.vars <- bootStatsDf(elastic.bigdata)
+elastic.bigdata.vars$var <- rownames(elastic.bigdata.vars)
+elastic.bigdata.vars <- subset(elastic.bigdata.vars, startsWith(var, 'vimp.c.index'))
+elastic.bigdata.vars$var <-
+  substring(elastic.bigdata.vars$var, nchar('vimp.c.index.') + 1)
+
+elastic.bigdata.vars <-
+  elastic.bigdata.vars[order(elastic.bigdata.vars$val, decreasing = TRUE)[1:20], ]
+
+elastic.bigdata.vars <-
+  elastic.bigdata.vars[order(elastic.bigdata.vars$val, decreasing = FALSE), ]
+
+cat('c(', paste0("'", as.character(elastic.bigdata.vars$description), "',"), ')', sep = '\n')
+
+elastic.bigdata.vars$description <- factorOrderedLevels(lookUpDescriptions(elastic.bigdata.vars$var))
+
+elastic.bigdata.vars$description.manual <-
+  factorOrderedLevels(
+    c(
+      'Biguanides',
+      'CKD',
+      'Osmotic laxatives',
+      'MCV',
+      'IMD score',
+      'Dementia',
+      'Home visit',
+      'Sulphonylureas',
+      'Insulin',
+      'LV failure',
+      'Cardiac glycosides',
+      'Telephone encounter',
+      'Records held date',
+      'Chest pain',
+      'Diabetes',
+      'Smoking status',
+      'Loop diuretics',
+      'Gender',
+      'Type 2 diabetes',
+      'Age'
+      )
+  )
+
+# Plot a bar graph of them
+elastic.bigdata.plot <-
+  ggplot(
+    elastic.bigdata.vars,
+    aes(x = description.manual, y = val, ymin = lower, ymax = upper)
+  ) +
+  geom_bar(stat = 'identity') + 
+  geom_errorbar(width = 0.25) +
+  coord_flip() +
+  theme(axis.title.y = element_blank(), axis.text.y = element_text(size = 10)) +
+  ylim(0, 0.17)
 
 
 # Combine for output
 plot_grid(
-  rf.bigdata.plot, cox.bigdata.plot,
+  rf.bigdata.plot, cox.bigdata.plot, elastic.bigdata.plot,
   labels = c('A', 'B', 'C'),
-  align = "h", ncol = 2
+  ncol = 3
 )
 
 ggsave(
   '../../output/variable-importances.pdf',
-  width = 16,
-  height = 9,
+  width = 24,
+  height = 8,
   units = 'cm',
   useDingbats = FALSE
 )
+
+
+# Print a helpful list of overlapping predictors
+print('RF vs Cox')
+print(
+  paste(
+    rf.bigdata.vars$description.manual[
+      rf.bigdata.vars$description.manual %in%
+        cox.bigdata.vars$description.manual
+      ], collapse = ', ')
+)
+print('Cox vs elastic net')
+print(
+  paste(
+    elastic.bigdata.vars$description.manual[
+      elastic.bigdata.vars$description.manual %in%
+        cox.bigdata.vars$description.manual
+      ], collapse = ', ')
+)
+print('RF vs elastic net not Cox')
+print(
+  paste(
+    elastic.bigdata.vars$description.manual[
+      elastic.bigdata.vars$description.manual %in%
+        rf.bigdata.vars$description.manual & !(
+          elastic.bigdata.vars$description.manual %in%
+          cox.bigdata.vars$description.manual)
+      ], collapse = ', ')
+)
+print('Cox vs elastic net not RF')
+print(
+  paste(
+    elastic.bigdata.vars$description.manual[
+      elastic.bigdata.vars$description.manual %in%
+        cox.bigdata.vars$description.manual & !(
+          elastic.bigdata.vars$description.manual %in%
+            rf.bigdata.vars$description.manual)
+      ], collapse = ', ')
+)
+# Should be none or the graph will be challenging to draw!
+
+# Aborted idea to draw a rank-change chart which is too messy to be useful...
+elastic.bigdata.vars$model <- 'enet'
+rf.bigdata.vars$model <- 'rf'
+cox.bigdata.vars$model <- 'cox'
+
+all.models <- rbind(cox.bigdata.vars, rf.bigdata.vars, elastic.bigdata.vars)
+
+all.models$model <- factor(all.models$model, levels = c('rf', 'cox', 'enet'))
+
+ggplot(
+  all.models,
+  aes(
+    x = model, y = log(val), ymin = log(lower), ymax = log(upper),
+    label = description.manual, group = description.manual
+  )) +
+  geom_text(position = position_dodge(width = 0.7)) +
+  geom_errorbar(width = 0.1, position = position_dodge(width = 0.7)) +
+  geom_point(position = position_dodge(width = 0.7))
+
