@@ -527,4 +527,10 @@ calibration.table <-
 
 calibration.score <- calibrationScore(calibration.table)
 
-calibrationPlot(calibration.table)
+calibrationPlot(calibration.table, show.censored = TRUE)
+
+# Save the calibration table for plotting later
+write.csv(
+  calibration.table,
+  paste0(output.filename.base, '-calibration-table.csv')
+)
