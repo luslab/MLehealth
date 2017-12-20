@@ -1305,23 +1305,58 @@ calibrationTable <- function(
   df[, c('risk', 'event')]
 }
 
-calibrationPlot <- function(df) {
+calibrationPlot <- function(df, max.points = NA, show.censored = FALSE) {
   # Convert risk to numeric, because ggplot treats logicals like categoricals
   df$event <- as.numeric(df$event)
   
-  # Create a dummy data frame of censored values to plot
-  censored.df <- df[is.na(df$event),]
-  censored.df$event <- 0.5
+  # Make points.df which will be used to plot the points (we need to keep the
+  # full df to make sure the smoothed curve is accurate). If max.points is NA,
+  # don't do anything, but if it's specified then sample the data frame.
+  if(!is.na(max.points)) {
+    if(nrow(df) > max.points) {
+      points.df <- sample.df(df, max.points)
+    }
+  } else {
+    points.df <- df
+  }
+  # Either way, let's manually jitter the points in points.df, because ggplot's
+  # jitter adds both positive and negative which is confusing
+  points.no.event <- points.df$event == 0 & !is.na(points.df$event)
+  points.df$event[points.no.event] <-
+    runif(sum(points.no.event), min = 0, max = 0.1)
+  points.event <- points.df$event == 1 & !is.na(points.df$event)
+  points.df$event[points.event] <-
+    runif(sum(points.event), min = 0.9, max = 1)
   
-  ggplot(df, aes(x = risk, y = event)) +
-    geom_abline(slope = 1, intercept = 0) +
-    geom_point(position = position_jitter(w = 00, h = 0.25), alpha = 0.1) +
-    geom_point(
-      data = censored.df, colour = 'grey', alpha = 0.1,
-      position = position_jitter(w = 00, h = 0.125)
-    ) +
-    geom_smooth() +
-    coord_cartesian(xlim = c(0,1), ylim = c(0,1))
+  # Start the calibration plot
+  calibration.plot <-
+    ggplot(df, aes(x = risk, y = event)) +
+      # At the back, a 1:1 line for the 'perfect' result
+      geom_abline(slope = 1, intercept = 0) +
+      # Then, plot the points
+      geom_point(data = points.df, alpha = 0.1) +
+      # axis limits
+      coord_cartesian(xlim = c(0,1), ylim = c(0,1))
+  
+  # If the censored points need to be added...
+  if(show.censored) {
+    # Create a dummy data frame of censored values to plot
+    censored.df <- df[is.na(df$event),]
+    censored.df$event <- 0.5
+    
+    calibration.plot <-
+      calibration.plot +
+      geom_point(
+        data = censored.df, colour = 'grey', alpha = 0.1,
+        position = position_jitter(w = 0, h = 0.05)
+      )
+  }
+  
+  # Finally, plot a smoothed calibration curve on top
+  calibration.plot <-
+    calibration.plot + geom_smooth()
+  
+  calibration.plot
 }
 
 calibrationScore <- function(
