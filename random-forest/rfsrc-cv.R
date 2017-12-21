@@ -28,6 +28,9 @@ data.filename <- '../../data/cohort-sanitised.csv'
 
 source('../lib/rfsrc-cv-nsplit-bootstrap.R', chdir = TRUE)
 
+# Save the resulting 'final' model
+saveRDS(surv.model.fit, paste0(output.filename.base, '-final-model.rds'))
+
 #' # Results
 #' 
 #' 
@@ -56,7 +59,12 @@ calibration.table <-
 
 calibration.score <- calibrationScore(calibration.table)
 
-calibrationPlot(calibration.table)
+calibrationPlot(calibration.table, show.censored = TRUE, max.points = 10000)
+
+# Save the calibration data for later plotting
+write.csv(
+  calibration.table, paste0(output.filename.base, '-calibration-table.csv')
+)
 
 #' The area between the calibration curve and the diagonal is 
 #' **`r round(calibration.score['area'], 3)`** +/-
