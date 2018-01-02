@@ -1,13 +1,13 @@
 models.include <-
   c(
     'age', 'cox', 'cox disc', 'cox imp', 'cox imp disc', 'rfsrc', 'rfsrc imp',
-    'rf-logrank', 'cox-logrank disc'
+    'rf-logrank', 'cox-logrank disc', 'cox-elnet disc'
   )
 
 source('../lib/handy.R')
 requirePlus('ggplot2', 'cowplot')
 
-models.performance.all <- readTablePlus('../../output/models-performance.tsv')
+models.performance.all <- readTablePlus('../../output/models-performance-manual.tsv')
 
 models.performance.all$x.labels <-
   paste0(
@@ -41,7 +41,7 @@ plot.c.index <-
     aes(ymin = c.index.lower, ymax = c.index.upper), width = 0.1
   ) +
   coord_cartesian(
-    ylim = c(0.7, 0.8)
+    ylim = c(0.75, 0.81)
   ) +
   theme(legend.position = "none")
   
