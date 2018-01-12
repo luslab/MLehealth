@@ -21,14 +21,14 @@ opts_chunk$set(cache.lazy = FALSE)
 #' 
 #+ user_variables
 
-output.filename.base <- '../../output/cox-discrete-elasticnet-01'
+output.filename.base <- '../../output/cox-discrete-elasticnet-08'
 
-bootstraps <- 3
+bootstraps <- 100
 bootstrap.filename <- paste0(output.filename.base, '-boot-all.csv')
 
 n.data <- NA # This is after any variables being excluded in prep
 
-n.threads <- 8
+n.threads <- 16
 
 #' ## Data set-up
 #' 
@@ -245,13 +245,15 @@ colnames(COHORT.bin)[colnames(COHORT.bin) == 'surv_eventTRUE'] <- 'surv_event'
 #' 
 #' Run a loop over alphas running from LASSO to ridge regression, and see which
 #' is best after tenfold cross-validation...
+#' 
+#+ elastic_net_full
 
 require(glmnet)
 initParallel(n.threads)
 
 time.start <- handyTimer()
 
-alphas <- seq(0, 1, length.out = 1)
+alphas <- seq(0, 1, length.out = 101)
 mse <- c()
 
 for(alpha in alphas) {
@@ -264,11 +266,18 @@ for(alpha in alphas) {
       alpha = alpha,
       parallel = TRUE
     )
-  best.lambda.i <- which(cv.fit$lambda == cv.fit$lambda.min) # should this be lambda.1se?
+  best.lambda.i <- which(cv.fit$lambda == cv.fit$lambda.min)
   mse <- c(mse, cv.fit$cvm[best.lambda.i])
 }
 
 time.cv <- handyTimer(time.start)
+
+write.csv(
+  data.frame(
+    alphas, mse
+  ),
+  paste0(output.filename.base, '-alpha-calibration.csv')
+)
 
 #' `r length(alphas)` alpha values tested in `r time.cv` seconds!
 
@@ -284,6 +293,9 @@ cv.fit <-
     alpha = alpha.best,
     parallel = TRUE
   )
+
+# Save for future use
+saveRDS(cv.fit, 'cv.fit.rds')
 
 #' The best alpha was `r alpha.best`, and the lambda with the lowest mean-square
 #' error was `r cv.fit$lambda.min`. We'll be using the strictest lambda which is
@@ -333,49 +345,78 @@ c.index <- glmnetCIndex(cv.fit, COHORT.bin[test.set, ])
 #+ calibration_plot
 
 glmnetCalibrationTable <- function(model.fit, dm, test.set, risk.time = 5) {
-  # Select the coefficients of the model which are greater than zero
-  coef.non0 <- as.vector(abs(coef(model.fit, s = "lambda.1se")) > 0)
-  # Values of coefficients
-  selected.coef <- coef(model.fit, s = "lambda.1se")[coef.non0]
-  # Names of coefficients
-  selected.vars <-
-    colnames(dm)[
-      !(colnames(dm) %in% c('surv_time', 'surv_event'))
-      ][coef.non0]
+  # Work out risks at risk.time for the special case of a glmnet model
   
-  # Make a dummy data frame from the model matrix for a dummy Cox model because
-  # coxph needs a data frame not a matrix
-  dummy.df <- data.frame(COHORT.bin[, c('surv_time', 'surv_event', selected.vars)])
+  # Derive baseline hazard from cv.glmnet model, heavily based on the
+  # glmnet.survcurve and glmnet.basesurv functions in hdnom...
   
-  # Round the times in the dummy data frame to save memory and time
-  dummy.df$surv_time <- round(dummy.df$surv_time, 1)
+  # Get predictions from the training set, because it's the training set whose
+  # baseline hazard we need
   
-  dummy.cph <-
-    coxph(
-      as.formula(
-        paste0(
-          'Surv(surv_time, surv_event) ~ ',
-          # use make.names because turning the binarised matrix into a data frame
-          # converts its colnames
-          paste0(make.names(selected.vars), collapse = '+')
-        )),
-      data = dummy.df[-test.set, ],
-      init = selected.coef,
-      iter = 0
+  # This is the relevant section of glmnet.survcurve from 02-hdnom-nomogram.R:
+  # lp = as.numeric(predict(object, newx = data.matrix(x),
+  #                         s = object$'lambda', type = 'link'))
+  # lp means linear predictor from predict.glmnet, because type = 'link'
+  lp <-
+    as.numeric(
+      predict(
+        model.fit,
+        newx =
+          data.matrix(
+            dm[-test.set, !(colnames(dm) %in% c('surv_time', 'surv_event'))]
+          ),
+        s = model.fit$lambda.1se,
+        type = 'link'
+      )
+    )
+  # At all unique times in the training set...
+  t.unique <-
+    # MUST sort these or the cumulative sum below will go crazy!
+    sort(unique(dm[-test.set, 'surv_time'][dm[-test.set, 'surv_event'] == 1L]))
+  
+  alpha <- c()
+  for (i in 1:length(t.unique)) {
+    # ...loop over calculating the fraction of the population which dies at each
+    # timepoint
+    alpha[i] <-
+      sum(
+        # Training set 
+        dm[-test.set, 'surv_time'][
+          dm[-test.set, 'surv_event'] == 1
+        ] == t.unique[i]
+      ) /
+      sum(
+        exp(lp[dm[-test.set, 'surv_time'] >= t.unique[i]])
+      )
+  }
+  
+  # Get the cumulative hazard at risk.time by interpolating...
+  baseline.cumhaz <-
+    approx(
+      t.unique, cumsum(alpha), yleft = 0, xout = risk.time, rule = 2
+    )$y
+  
+  # Get predictions from the test set to modify the baseline hazard with
+  lp.test <-
+    as.numeric(
+      predict(
+        model.fit,
+        newx =
+          data.matrix(
+            dm[test.set, !(colnames(dm) %in% c('surv_time', 'surv_event'))]
+          ),
+        s = model.fit$lambda.1se,
+        type = 'link'
+      )
     )
   
-  # Perform a fit to get survival curves for the test set
-  sfit <- survfit(dummy.cph, newdata = dummy.df[test.set, ])
-  
-  risktime.col <- which.min(abs(sfit$time - risk.time))
-  
-  # Returns % survived, we want % dead
-  risks <- 1 - as.vector(sfit$surv[risktime.col, ])
-  
+  # 1 minus to get % dead rather than alive
+  risks <- 1 - exp(-exp(lp.test) * (baseline.cumhaz))
+ 
   calibration.table <-
     data.frame(
-      surv_event = dummy.df$surv_event[test.set],
-      surv_time = dummy.df$surv_time[test.set],
+      surv_event = dm[test.set, 'surv_event'],
+      surv_time = dm[test.set, 'surv_time'],
       risk = risks
     )
   
@@ -397,7 +438,7 @@ calibration.table <- glmnetCalibrationTable(cv.fit, COHORT.bin, test.set)
 
 calibration.score <- calibrationScore(calibration.table)
 
-calibrationPlot(calibration.table)
+calibrationPlot(calibration.table, show.censored = TRUE, max.points = 10000)
 
 #' Calibration score is `r calibration.score`.
 
@@ -503,7 +544,7 @@ for(i in 1:bootstraps) {
   colnames(COHORT.boot)[colnames(COHORT.boot) == 'surv_eventTRUE'] <- 'surv_event'
   
   # Fit, but with alpha fixed on the optimal value
-  cv.fit.boot <-
+  cv.fit.boot <- #readRDS('cv.fit.rds')
     cv.glmnet(
       COHORT.boot[, !(colnames(COHORT.boot) %in% c('surv_time', 'surv_event'))],
       Surv(COHORT.boot[, 'surv_time'], COHORT.boot[, 'surv_event']),
@@ -512,9 +553,17 @@ for(i in 1:bootstraps) {
       alpha = alpha.best
     )
 
-  c.index.boot <- glmnetCIndex(cv.fit.boot, COHORT.boot)
-  calibration.boot <-
-    calibrationScore(glmnetCalibrationTable(cv.fit.boot, COHORT.boot, test.set))
+  c.index.boot <- glmnetCIndex(cv.fit.boot, COHORT.bin[test.set,])
+  
+  calibration.table.boot <-
+    glmnetCalibrationTable(
+      cv.fit.boot, rbind(COHORT.boot, COHORT.bin[test.set, ]),
+      test.set = (nrow(COHORT.boot) + 1):(nrow(COHORT.boot) + nrow(COHORT.bin[test.set, ]))
+    )
+  
+  calibration.boot <- calibrationScore(calibration.table.boot)
+  
+  print(calibrationPlot(calibration.table.boot))
   
   var.imp.vector <- c()
   # Loop over variables to get variable importance
@@ -533,7 +582,7 @@ for(i in 1:bootstraps) {
     colnames(COHORT.vimp)[colnames(COHORT.vimp) == 'surv_eventTRUE'] <- 'surv_event'
     # Calculate the new C-index
     c.index.vimp <- glmnetCIndex(cv.fit.boot, COHORT.vimp)
-    
+
     # Append the difference between the C-index with scrambling and the original
     var.imp.vector <-
       c(
@@ -541,7 +590,7 @@ for(i in 1:bootstraps) {
         c.index.boot - c.index.vimp
       )
   }
-  
+
   names(var.imp.vector) <-
     paste0(
       'vimp.c.index.',
@@ -558,8 +607,8 @@ for(i in 1:bootstraps) {
       bootstrap.params,
       data.frame(
         t(var.imp.vector),
-        c.index.boot,
-        calibration.boot
+        c.index = c.index.boot,
+        calibration.score = calibration.boot
       )
     )
   
@@ -573,6 +622,8 @@ time.boot.final <- handyTimer(time.start)
 
 # Get coefficients and variable importances from bootstrap fits
 surv.model.fit.coeffs <- bootStatsDf(bootstrap.params)
+
+print(surv.model.fit.coeffs)
 
 # Save performance results
 varsToTable(
