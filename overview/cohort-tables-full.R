@@ -1,6 +1,6 @@
-setwd('R:/Pop_Health/Farr_Luscombe/')
-cohort.file <- '2_Cohort/COHORT_SCAD_makecohort2.rda'
-load(cohort.file)
+data.filename <- '../../data/cohort-sanitised.csv'
+require(data.table)
+COHORT <- fread(data.filename)
 
 percentMissing <- function(x, sf = 3) {
   round(sum(is.na(x))/length(x), digits = sf)*100
@@ -17,13 +17,13 @@ COHORT <-
     ]
 
 # Age, 5, 50, 95, %missing
-print(quantile(COHORT$age, c(0.5, 0.05, 0.95)))
+print(quantile(COHORT$age, c(0.5, 0.025, 0.975)))
 
 # Gender
 print(table(COHORT$gender)/nrow(COHORT)*100)
 
 # Deprivation, 5, 50, 95, %missing
-print(quantile(COHORT$imd_score, c(0.5, 0.05, 0.95), na.rm = TRUE))
+print(quantile(COHORT$imd_score, c(0.5, 0.025, 0.975), na.rm = TRUE))
 print(percentMissing(COHORT$imd_score))
 
 # SCAD subtype
@@ -56,11 +56,11 @@ print(
 )
 
 # Total cholesterol
-print(quantile(COHORT$total_chol_6mo, c(0.5, 0.05, 0.95), na.rm = TRUE))
+print(quantile(COHORT$total_chol_6mo, c(0.5, 0.025, 0.975), na.rm = TRUE))
 print(percentMissing(COHORT$total_chol_6mo))
 
 # HDL
-print(quantile(COHORT$hdl_6mo, c(0.5, 0.05, 0.95), na.rm = TRUE))
+print(quantile(COHORT$hdl_6mo, c(0.5, 0.025, 0.975), na.rm = TRUE))
 print(percentMissing(COHORT$hdl_6mo))
 
 # Heart failure
@@ -94,23 +94,23 @@ print(sum(COHORT$hx_depression)/nrow(COHORT)*100)
 print(sum(COHORT$hx_anxiety)/nrow(COHORT)*100)
 
 # Heart rate
-print(quantile(COHORT$pulse_6mo, c(0.5, 0.05, 0.95), na.rm = TRUE))
+print(quantile(COHORT$pulse_6mo, c(0.5, 0.025, 0.975), na.rm = TRUE))
 print(percentMissing(COHORT$pulse_6mo))
 
 # Creatinine
-print(quantile(COHORT$crea_6mo, c(0.5, 0.05, 0.95), na.rm = TRUE))
+print(quantile(COHORT$crea_6mo, c(0.5, 0.025, 0.975), na.rm = TRUE))
 print(percentMissing(COHORT$crea_6mo))
 
 # WCC
-print(quantile(COHORT$total_wbc_6mo, c(0.5, 0.05, 0.95), na.rm = TRUE))
+print(quantile(COHORT$total_wbc_6mo, c(0.5, 0.025, 0.975), na.rm = TRUE))
 print(percentMissing(COHORT$total_wbc_6mo))
 
 # Haemoglobin
-print(quantile(COHORT$haemoglobin_6mo, c(0.5, 0.05, 0.95), na.rm = TRUE))
+print(quantile(COHORT$haemoglobin_6mo, c(0.5, 0.025, 0.975), na.rm = TRUE))
 print(percentMissing(COHORT$haemoglobin_6mo))
 
 # Follow-up, 5, 50, 95
-print(quantile(COHORT.full$endpoint_death_date, c(0.5, 0.05, 0.95)))/365.25
+print(quantile(COHORT$endpoint_death_date, c(0.5, 0.025, 0.975)))/365.25
 
 # Death vs censored, %
-print(table(COHORT.full$endpoint_death)) /nrow(COHORT.full)*100
+print(table(COHORT$endpoint_death)) /nrow(COHORT)*100
