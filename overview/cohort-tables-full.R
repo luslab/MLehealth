@@ -20,6 +20,7 @@ COHORT <-
 print(quantile(COHORT$age, c(0.5, 0.025, 0.975)))
 
 # Gender
+print(table(COHORT$gender))
 print(table(COHORT$gender)/nrow(COHORT)*100)
 
 # Deprivation, 5, 50, 95, %missing
