@@ -1,6 +1,6 @@
 # Machine learning on electronic health records
 
-Repository of code developed for TODO: paper title and reference.
+Repository of code developed for *Machine learning models in electronic health records can outperform conventional survival models for predicting patient mortality in coronary artery disease*.
 
 ## Introduction
 
@@ -44,6 +44,10 @@ This model uses the same scaling as Rapsomaniki et al., but is conducted on a si
 
 Functions to scale data for Cox modelling.
 
+#### cox-discrete-elasticnet.R
+
+Discrete elastic net Cox model for the data-driven modelling, which cross-validates to find the optimal _α_ and then bootstraps to establish distributions for the other fitted parameters.
+
 #### cox-discrete-varsellogrank.R
 
 Discrete Cox model for the data-driven modelling, which cross-validates over number of variables used, drawing from a list ranked by univariate logrank tests.
@@ -51,6 +55,10 @@ Discrete Cox model for the data-driven modelling, which cross-validates over num
 #### cox-discretised.R
 
 This model uses the expert-selected dataset with discretised versions of continuous variables to allow missing values to be incorporated, and cross-validates to determine the discretisation scheme.
+
+#### cox-discretised-imputed.R
+
+This model uses the imputed version of the expert-selected dataset with discretised versions of continuous variables, following the same method as above.
 
 #### rapsomaniki-cox-values-from-paper.csv
 
@@ -96,9 +104,13 @@ Produces a graph of the C-index and calibration score from all models. The basis
 
 Plots a line graph showing C-index performance of random forests depending on ``mtry`` and ``nsplit`` in the large dataset.
 
+#### calibration-plots.R
+
+Plots two example calibration curves to show how the calibration score is calculated. The basis of Fig. 2 in the paper.
+
 #### cohort-tables.R
 
-Prints a number of summary statistics used for Table 1 in the paper.
+Prints a number of summary statistics used for Table 2 in the paper.
 
 #### explore-dataset.R
 
@@ -106,7 +118,7 @@ A number of quick exploratory graphs and comparisons to explore the expert-selec
 
 #### missing-values-risk.R
 
-Compares coefficients for Cox models. First, continuous imputed vs continuous with missing indicators and discrete; second, ranges of continuous values’ associated risks with those associated with a value being missing; finally, survival curves for patients with a particular value missing vs present. The basis of Fig. 2 in the paper.
+Compares coefficients for Cox models. First, continuous imputed vs continuous with missing indicators and discrete; second, ranges of continuous values’ associated risks with those associated with a value being missing; finally, survival curves for patients with a particular value missing vs present. The basis of Fig. 3 in the paper.
 
 #### performance-differences.R
 
@@ -114,11 +126,11 @@ Pairwise differences with uncertainty in C-index and calibration between all mod
 
 #### variable-effects.R
 
-Plots of variable effects for continuous and discrete Cox models, and random forests. The basis of Fig. 3 in the paper.
+Plots of variable effects for continuous and discrete Cox models, and random forests. The basis of Fig. 4 in the paper.
 
 #### variable-importances.R
 
-Plots permutation variable importances calculated for the final data-driven models, post variable selection. The basis of Fig. 4 in the paper.
+Plots permutation variable importances calculated for the final data-driven models, post variable selection. The basis of Fig. 5 in the paper.
 
 ### random-forest
 
